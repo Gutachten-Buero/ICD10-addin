@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="ngrok-skip-browser-warning" content="true" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ICD-10 Codes</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", sans-serif; font-size: 13px; background: #f5f5f5; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; }
+    #header { background: #2d5016; color: white; padding: 10px 12px 8px; flex-shrink: 0; }
+    #header h1 { font-size: 14px; font-weight: 600; }
+    #header p { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+    #search-bar { padding: 8px 10px; background: white; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; }
+    #search-input { width: 100%; padding: 6px 10px; border: 1px solid #d0d0d0; border-radius: 4px; font-size: 12px; font-family: inherit; outline: none; }
+    #search-input:focus { border-color: #2d5016; }
+    #baustein-list { flex: 1; overflow-y: auto; padding: 6px 8px 60px; }
+    .kat-group { margin-bottom: 5px; border-radius: 6px; overflow: hidden; border: 1px solid #c8d8b0; }
+    .kat-header { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; background: #2d5016; color: white; cursor: pointer; user-select: none; }
+    .kat-header:hover { background: #224010; }
+    .kat-header.open { background: #224010; }
+    .kat-header-left { display: flex; align-items: baseline; gap: 8px; }
+    .kat-code { font-size: 11px; font-weight: 700; opacity: 0.8; font-family: monospace; }
+    .kat-name { font-size: 12px; font-weight: 600; }
+    .kat-count { font-size: 10px; opacity: 0.6; }
+    .kat-arrow { font-size: 10px; opacity: 0.8; transition: transform 0.2s; }
+    .kat-header.open .kat-arrow { transform: rotate(180deg); }
+    .kat-body { display: none; background: #f5f8f0; padding: 4px 5px; }
+    .kat-body.open { display: block; }
+    .baustein-card { background: white; border: 1px solid #dde8cc; border-radius: 5px; margin-bottom: 4px; padding: 7px 9px 6px; cursor: pointer; transition: border-color 0.15s; }
+    .baustein-card:last-child { margin-bottom: 0; }
+    .baustein-card:hover { border-color: #2d5016; box-shadow: 0 1px 4px rgba(45,80,22,0.1); }
+    .baustein-card.selected { border-color: #2d5016; background: #eef4e4; }
+    .baustein-code { font-weight: 700; font-size: 12px; color: #2d5016; font-family: monospace; margin-bottom: 2px; }
+    .baustein-desc { font-size: 11px; color: #444; line-height: 1.3; }
+    .no-results { text-align: center; color: #999; padding: 30px 20px; font-size: 12px; }
+    #action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e0e0e0; padding: 8px 10px; display: flex; gap: 6px; }
+    #btn-einfuegen { flex: 1; padding: 8px; background: #2d5016; color: white; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    #btn-einfuegen:hover { background: #224010; }
+    #btn-einfuegen:disabled { background: #aaa; cursor: not-allowed; }
+    #btn-vorschau { padding: 8px 12px; background: white; color: #2d5016; border: 1px solid #2d5016; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: inherit; }
+    #btn-vorschau:hover { background: #eef4e4; }
+    #btn-vorschau:disabled { opacity: 0.4; cursor: not-allowed; }
+    #vorschau-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: flex-end; }
+    #vorschau-overlay.open { display: flex; }
+    #vorschau-box { background: white; width: 100%; max-height: 50vh; border-radius: 10px 10px 0 0; padding: 14px 14px 20px; overflow-y: auto; }
+    #vorschau-box h3 { font-size: 13px; font-weight: 600; color: #2d5016; margin-bottom: 6px; font-family: monospace; }
+    #vorschau-text { font-size: 13px; color: #333; }
+    #vorschau-close { float: right; font-size: 16px; color: #888; cursor: pointer; border: none; background: none; padding: 0; }
+    #toast { display: none; position: fixed; bottom: 65px; left: 50%; transform: translateX(-50%); background: #2e7d32; color: white; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 500; z-index: 200; white-space: nowrap; }
+    #toast.show { display: block; }
+  </style>
+</head>
+<body>
+<div id="header"><h1>🏥 ICD-10 Codes</h1><p>Psychiatrische Diagnosen F00–F99</p></div>
+<div id="search-bar"><input type="text" id="search-input" placeholder="Code oder Bezeichnung suchen..." autocomplete="off" /></div>
+<div id="baustein-list"></div>
+<div id="action-bar">
+  <button id="btn-vorschau" disabled>Vorschau</button>
+  <button id="btn-einfuegen" disabled>In Word einfügen</button>
+</div>
+<div id="vorschau-overlay">
+  <div id="vorschau-box">
+    <button id="vorschau-close">✕</button>
+    <h3 id="vorschau-titel"></h3>
+    <div id="vorschau-text"></div>
+  </div>
+</div>
+<div id="toast">✓ Code eingefügt</div>
+
+<script>
+let selectedId = null;
+let suchbegriff = "";
+let offeneKats = new Set();
+
+const kategorien = [
+  { id: 0, code: "F00–F09", name: "Organische Störungen" },
+  { id: 1, code: "F10–F19", name: "Psychotrope Substanzen" },
+  { id: 2, code: "F20–F29", name: "Schizophrenie / Psychosen" },
+  { id: 3, code: "F30–F39", name: "Affektive Störungen" },
+  { id: 4, code: "F40–F48", name: "Angst / Neurotische Störungen" },
+  { id: 5, code: "F50–F59", name: "Verhaltensauffälligkeiten" },
+  { id: 6, code: "F60–F69", name: "Persönlichkeitsstörungen" },
+  { id: 7, code: "F70–F79", name: "Intelligenzminderung" },
+  { id: 8, code: "F80–F89", name: "Entwicklungsstörungen" },
+  { id: 9, code: "F90–F98", name: "Kinder & Jugendliche" },
+  { id: 10, code: "F99", name: "Nicht näher bezeichnet" },
+];
+
+const bausteine = [
+  { id:1, cat:0, titel:"F00.0 – Demenz bei Alzheimer-Krankheit -- mit frühem Beginn •", text:"F00.0 Demenz bei Alzheimer-Krankheit -- mit frühem Beginn •" },
+  { id:2, cat:0, titel:"F00.1 – Demenz bei Alzheimer-Krankheit -- mit spätem Beginn •", text:"F00.1 Demenz bei Alzheimer-Krankheit -- mit spätem Beginn •" },
+  { id:3, cat:0, titel:"F00.2 – Demenz bei Alzheimer-Krankheit -- atypische oder Mischform •", text:"F00.2 Demenz bei Alzheimer-Krankheit -- atypische oder Mischform •" },
+  { id:4, cat:0, titel:"F00.9 – Demenz bei Alzheimer-Krankheit -- nicht näher bezeichnet •", text:"F00.9 Demenz bei Alzheimer-Krankheit -- nicht näher bezeichnet •" },
+  { id:5, cat:0, titel:"F01.0 – Vaskuläre Demenz -- mit akutem Beginn •", text:"F01.0 Vaskuläre Demenz -- mit akutem Beginn •" },
+  { id:6, cat:0, titel:"F01.1 – Vaskuläre Demenz -- Multiinfarktdemenz •", text:"F01.1 Vaskuläre Demenz -- Multiinfarktdemenz •" },
+  { id:7, cat:0, titel:"F01.2 – Vaskuläre Demenz -- subkortikal •", text:"F01.2 Vaskuläre Demenz -- subkortikal •" },
+  { id:8, cat:0, titel:"F01.3 – Vaskuläre Demenz -- gemischt kortikal und subkortikal •", text:"F01.3 Vaskuläre Demenz -- gemischt kortikal und subkortikal •" },
+  { id:9, cat:0, titel:"F01.8 – Vaskuläre Demenz -- sonstige •", text:"F01.8 Vaskuläre Demenz -- sonstige •" },
+  { id:10, cat:0, titel:"F01.9 – Vaskuläre Demenz -- nicht näher bezeichnet •", text:"F01.9 Vaskuläre Demenz -- nicht näher bezeichnet •" },
+  { id:11, cat:0, titel:"F02.0 – Demenz bei anderenorts klassifizierten Krankheiten -- bei Pick-Krankheit •", text:"F02.0 Demenz bei anderenorts klassifizierten Krankheiten -- bei Pick-Krankheit •" },
+  { id:12, cat:0, titel:"F02.1 – Demenz bei anderenorts klassifizierten Krankheiten -- bei Creutzfeldt-Jakob-Krankheit •", text:"F02.1 Demenz bei anderenorts klassifizierten Krankheiten -- bei Creutzfeldt-Jakob-Krankheit •" },
+  { id:13, cat:0, titel:"F02.2 – Demenz bei anderenorts klassifizierten Krankheiten -- bei Chorea Huntington •", text:"F02.2 Demenz bei anderenorts klassifizierten Krankheiten -- bei Chorea Huntington •" },
+  { id:14, cat:0, titel:"F02.3 – Demenz bei anderenorts klassifizierten Krankheiten -- bei Parkinson-Krankheit •", text:"F02.3 Demenz bei anderenorts klassifizierten Krankheiten -- bei Parkinson-Krankheit •" },
+  { id:15, cat:0, titel:"F02.4 – Demenz bei anderenorts klassifizierten Krankheiten -- bei HIV-Krankheit •", text:"F02.4 Demenz bei anderenorts klassifizierten Krankheiten -- bei HIV-Krankheit •" },
+  { id:16, cat:0, titel:"F02.8 – Demenz bei anderenorts klassifizierten Krankheiten -- sonstige •", text:"F02.8 Demenz bei anderenorts klassifizierten Krankheiten -- sonstige •" },
+  { id:17, cat:0, titel:"F03 – Nicht näher bezeichnete Demenz •", text:"F03 Nicht näher bezeichnete Demenz •" },
+  { id:18, cat:0, titel:"F04 – Organisches amnestisches Syndrom -- nicht durch Alkohol/andere psychotrope Substanzen •", text:"F04 Organisches amnestisches Syndrom -- nicht durch Alkohol/andere psychotrope Substanzen •" },
+  { id:19, cat:0, titel:"F05.0 – Delir -- nicht auf Demenz aufgelagert •", text:"F05.0 Delir -- nicht auf Demenz aufgelagert •" },
+  { id:20, cat:0, titel:"F05.1 – Delir -- auf Demenz aufgelagert •", text:"F05.1 Delir -- auf Demenz aufgelagert •" },
+  { id:21, cat:0, titel:"F05.8 – Delir -- sonstige •", text:"F05.8 Delir -- sonstige •" },
+  { id:22, cat:0, titel:"F05.9 – Delir -- nicht näher bezeichnet •", text:"F05.9 Delir -- nicht näher bezeichnet •" },
+  { id:23, cat:0, titel:"F06.0 – Organische Halluzinose •", text:"F06.0 Organische Halluzinose •" },
+  { id:24, cat:0, titel:"F06.2 – Organische wahnhafte (schizophreniforme) Störung •", text:"F06.2 Organische wahnhafte (schizophreniforme) Störung •" },
+  { id:25, cat:0, titel:"F06.3 – Organische affektive Störungen •", text:"F06.3 Organische affektive Störungen •" },
+  { id:26, cat:0, titel:"F06.4 – Organische Angststörung •", text:"F06.4 Organische Angststörung •" },
+  { id:27, cat:0, titel:"F06.5 – Organische dissoziative Störung •", text:"F06.5 Organische dissoziative Störung •" },
+  { id:28, cat:0, titel:"F06.6 – Organische emotional labile (asthenische) Störung •", text:"F06.6 Organische emotional labile (asthenische) Störung •" },
+  { id:29, cat:0, titel:"F06.7 – Leichte kognitive Störung (organisch) •", text:"F06.7 Leichte kognitive Störung (organisch) •" },
+  { id:30, cat:0, titel:"F06.8 – Sonstige näher bezeichnete organische psychische Störungen •", text:"F06.8 Sonstige näher bezeichnete organische psychische Störungen •" },
+  { id:31, cat:0, titel:"F06.9 – Nicht näher bezeichnete organische psychische Störung •", text:"F06.9 Nicht näher bezeichnete organische psychische Störung •" },
+  { id:32, cat:0, titel:"F08 – Sonstige Störungen der Hirnfunktion •", text:"F08 Sonstige Störungen der Hirnfunktion •" },
+  { id:33, cat:0, titel:"F09 – Organische oder symptomatische psychische Störung, nicht näher bezeichnet **F10--F19 Psychische und Verhaltensstörungen durch psychotrope Substanzen** •", text:"F09 Organische oder symptomatische psychische Störung, nicht näher bezeichnet **F10--F19 Psychische und Verhaltensstörungen durch psychotrope Substanzen** •" },
+  { id:34, cat:1, titel:"F10.0 – Psychische und Verhaltensstörungen durch Alkohol -- Akute Intoxikation •", text:"F10.0 Psychische und Verhaltensstörungen durch Alkohol -- Akute Intoxikation •" },
+  { id:35, cat:1, titel:"F10.1 – Psychische und Verhaltensstörungen durch Alkohol -- Schädlicher Gebrauch •", text:"F10.1 Psychische und Verhaltensstörungen durch Alkohol -- Schädlicher Gebrauch •" },
+  { id:36, cat:1, titel:"F10.2 – Psychische und Verhaltensstörungen durch Alkohol -- Abhängigkeitssyndrom •", text:"F10.2 Psychische und Verhaltensstörungen durch Alkohol -- Abhängigkeitssyndrom •" },
+  { id:37, cat:1, titel:"F10.3 – Psychische und Verhaltensstörungen durch Alkohol -- Entzugssyndrom •", text:"F10.3 Psychische und Verhaltensstörungen durch Alkohol -- Entzugssyndrom •" },
+  { id:38, cat:1, titel:"F10.4 – Psychische und Verhaltensstörungen durch Alkohol -- Entzugssyndrom mit Delir •", text:"F10.4 Psychische und Verhaltensstörungen durch Alkohol -- Entzugssyndrom mit Delir •" },
+  { id:39, cat:1, titel:"F10.5 – Psychische und Verhaltensstörungen durch Alkohol -- Psychotische Störung •", text:"F10.5 Psychische und Verhaltensstörungen durch Alkohol -- Psychotische Störung •" },
+  { id:40, cat:1, titel:"F10.6 – Psychische und Verhaltensstörungen durch Alkohol -- Amnestisches Syndrom •", text:"F10.6 Psychische und Verhaltensstörungen durch Alkohol -- Amnestisches Syndrom •" },
+  { id:41, cat:1, titel:"F10.7 – Psychische und Verhaltensstörungen durch Alkohol -- Restzustand und spät auftretende psychotische Störung •", text:"F10.7 Psychische und Verhaltensstörungen durch Alkohol -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:42, cat:1, titel:"F10.8 – Psychische und Verhaltensstörungen durch Alkohol -- Sonstige psychische Störungen •", text:"F10.8 Psychische und Verhaltensstörungen durch Alkohol -- Sonstige psychische Störungen •" },
+  { id:43, cat:1, titel:"F10.9 – Psychische und Verhaltensstörungen durch Alkohol -- nicht näher bezeichnet •", text:"F10.9 Psychische und Verhaltensstörungen durch Alkohol -- nicht näher bezeichnet •" },
+  { id:44, cat:1, titel:"F11.0 – Psychische und Verhaltensstörungen durch Opioide -- Akute Intoxikation •", text:"F11.0 Psychische und Verhaltensstörungen durch Opioide -- Akute Intoxikation •" },
+  { id:45, cat:1, titel:"F11.1 – Psychische und Verhaltensstörungen durch Opioide -- Schädlicher Gebrauch •", text:"F11.1 Psychische und Verhaltensstörungen durch Opioide -- Schädlicher Gebrauch •" },
+  { id:46, cat:1, titel:"F11.2 – Psychische und Verhaltensstörungen durch Opioide -- Abhängigkeitssyndrom •", text:"F11.2 Psychische und Verhaltensstörungen durch Opioide -- Abhängigkeitssyndrom •" },
+  { id:47, cat:1, titel:"F11.3 – Psychische und Verhaltensstörungen durch Opioide -- Entzugssyndrom •", text:"F11.3 Psychische und Verhaltensstörungen durch Opioide -- Entzugssyndrom •" },
+  { id:48, cat:1, titel:"F11.4 – Psychische und Verhaltensstörungen durch Opioide -- Entzugssyndrom mit Delir •", text:"F11.4 Psychische und Verhaltensstörungen durch Opioide -- Entzugssyndrom mit Delir •" },
+  { id:49, cat:1, titel:"F11.5 – Psychische und Verhaltensstörungen durch Opioide -- Psychotische Störung •", text:"F11.5 Psychische und Verhaltensstörungen durch Opioide -- Psychotische Störung •" },
+  { id:50, cat:1, titel:"F11.6 – Psychische und Verhaltensstörungen durch Opioide -- Amnestisches Syndrom •", text:"F11.6 Psychische und Verhaltensstörungen durch Opioide -- Amnestisches Syndrom •" },
+  { id:51, cat:1, titel:"F11.7 – Psychische und Verhaltensstörungen durch Opioide -- Restzustand und spät auftretende psychotische Störung •", text:"F11.7 Psychische und Verhaltensstörungen durch Opioide -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:52, cat:1, titel:"F11.8 – Psychische und Verhaltensstörungen durch Opioide -- Sonstige psychische Störungen •", text:"F11.8 Psychische und Verhaltensstörungen durch Opioide -- Sonstige psychische Störungen •" },
+  { id:53, cat:1, titel:"F11.9 – Psychische und Verhaltensstörungen durch Opioide -- nicht näher bezeichnet •", text:"F11.9 Psychische und Verhaltensstörungen durch Opioide -- nicht näher bezeichnet •" },
+  { id:54, cat:1, titel:"F12.0 – Psychische und Verhaltensstörungen durch Cannabinoide -- Akute Intoxikation •", text:"F12.0 Psychische und Verhaltensstörungen durch Cannabinoide -- Akute Intoxikation •" },
+  { id:55, cat:1, titel:"F12.1 – Psychische und Verhaltensstörungen durch Cannabinoide -- Schädlicher Gebrauch •", text:"F12.1 Psychische und Verhaltensstörungen durch Cannabinoide -- Schädlicher Gebrauch •" },
+  { id:56, cat:1, titel:"F12.2 – Psychische und Verhaltensstörungen durch Cannabinoide -- Abhängigkeitssyndrom •", text:"F12.2 Psychische und Verhaltensstörungen durch Cannabinoide -- Abhängigkeitssyndrom •" },
+  { id:57, cat:1, titel:"F12.3 – Psychische und Verhaltensstörungen durch Cannabinoide -- Entzugssyndrom •", text:"F12.3 Psychische und Verhaltensstörungen durch Cannabinoide -- Entzugssyndrom •" },
+  { id:58, cat:1, titel:"F12.4 – Psychische und Verhaltensstörungen durch Cannabinoide -- Entzugssyndrom mit Delir •", text:"F12.4 Psychische und Verhaltensstörungen durch Cannabinoide -- Entzugssyndrom mit Delir •" },
+  { id:59, cat:1, titel:"F12.5 – Psychische und Verhaltensstörungen durch Cannabinoide -- Psychotische Störung •", text:"F12.5 Psychische und Verhaltensstörungen durch Cannabinoide -- Psychotische Störung •" },
+  { id:60, cat:1, titel:"F12.6 – Psychische und Verhaltensstörungen durch Cannabinoide -- Amnestisches Syndrom •", text:"F12.6 Psychische und Verhaltensstörungen durch Cannabinoide -- Amnestisches Syndrom •" },
+  { id:61, cat:1, titel:"F12.7 – Psychische und Verhaltensstörungen durch Cannabinoide -- Restzustand und spät auftretende psychotische Störung •", text:"F12.7 Psychische und Verhaltensstörungen durch Cannabinoide -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:62, cat:1, titel:"F12.8 – Psychische und Verhaltensstörungen durch Cannabinoide -- Sonstige psychische Störungen •", text:"F12.8 Psychische und Verhaltensstörungen durch Cannabinoide -- Sonstige psychische Störungen •" },
+  { id:63, cat:1, titel:"F12.9 – Psychische und Verhaltensstörungen durch Cannabinoide -- nicht näher bezeichnet •", text:"F12.9 Psychische und Verhaltensstörungen durch Cannabinoide -- nicht näher bezeichnet •" },
+  { id:64, cat:1, titel:"F13.0 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Akute Intoxikation •", text:"F13.0 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Akute Intoxikation •" },
+  { id:65, cat:1, titel:"F13.1 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Schädlicher Gebrauch •", text:"F13.1 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Schädlicher Gebrauch •" },
+  { id:66, cat:1, titel:"F13.2 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Abhängigkeitssyndrom •", text:"F13.2 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Abhängigkeitssyndrom •" },
+  { id:67, cat:1, titel:"F13.3 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Entzugssyndrom •", text:"F13.3 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Entzugssyndrom •" },
+  { id:68, cat:1, titel:"F13.4 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Entzugssyndrom mit Delir •", text:"F13.4 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Entzugssyndrom mit Delir •" },
+  { id:69, cat:1, titel:"F13.5 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Psychotische Störung •", text:"F13.5 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Psychotische Störung •" },
+  { id:70, cat:1, titel:"F13.6 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Amnestisches Syndrom •", text:"F13.6 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Amnestisches Syndrom •" },
+  { id:71, cat:1, titel:"F13.7 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Restzustand und spät auftretende psychotische Störung •", text:"F13.7 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:72, cat:1, titel:"F13.8 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Sonstige psychische Störungen •", text:"F13.8 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- Sonstige psychische Störungen •" },
+  { id:73, cat:1, titel:"F13.9 – Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- nicht näher bezeichnet •", text:"F13.9 Psychische und Verhaltensstörungen durch Sedativa/Hypnotika -- nicht näher bezeichnet •" },
+  { id:74, cat:1, titel:"F14.0 – Psychische und Verhaltensstörungen durch Kokain -- Akute Intoxikation •", text:"F14.0 Psychische und Verhaltensstörungen durch Kokain -- Akute Intoxikation •" },
+  { id:75, cat:1, titel:"F14.1 – Psychische und Verhaltensstörungen durch Kokain -- Schädlicher Gebrauch •", text:"F14.1 Psychische und Verhaltensstörungen durch Kokain -- Schädlicher Gebrauch •" },
+  { id:76, cat:1, titel:"F14.2 – Psychische und Verhaltensstörungen durch Kokain -- Abhängigkeitssyndrom •", text:"F14.2 Psychische und Verhaltensstörungen durch Kokain -- Abhängigkeitssyndrom •" },
+  { id:77, cat:1, titel:"F14.3 – Psychische und Verhaltensstörungen durch Kokain -- Entzugssyndrom •", text:"F14.3 Psychische und Verhaltensstörungen durch Kokain -- Entzugssyndrom •" },
+  { id:78, cat:1, titel:"F14.4 – Psychische und Verhaltensstörungen durch Kokain -- Entzugssyndrom mit Delir •", text:"F14.4 Psychische und Verhaltensstörungen durch Kokain -- Entzugssyndrom mit Delir •" },
+  { id:79, cat:1, titel:"F14.5 – Psychische und Verhaltensstörungen durch Kokain -- Psychotische Störung •", text:"F14.5 Psychische und Verhaltensstörungen durch Kokain -- Psychotische Störung •" },
+  { id:80, cat:1, titel:"F14.6 – Psychische und Verhaltensstörungen durch Kokain -- Amnestisches Syndrom •", text:"F14.6 Psychische und Verhaltensstörungen durch Kokain -- Amnestisches Syndrom •" },
+  { id:81, cat:1, titel:"F14.7 – Psychische und Verhaltensstörungen durch Kokain -- Restzustand und spät auftretende psychotische Störung •", text:"F14.7 Psychische und Verhaltensstörungen durch Kokain -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:82, cat:1, titel:"F14.8 – Psychische und Verhaltensstörungen durch Kokain -- Sonstige psychische Störungen •", text:"F14.8 Psychische und Verhaltensstörungen durch Kokain -- Sonstige psychische Störungen •" },
+  { id:83, cat:1, titel:"F14.9 – Psychische und Verhaltensstörungen durch Kokain -- nicht näher bezeichnet •", text:"F14.9 Psychische und Verhaltensstörungen durch Kokain -- nicht näher bezeichnet •" },
+  { id:84, cat:1, titel:"F15.0 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Akute Intoxikation •", text:"F15.0 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Akute Intoxikation •" },
+  { id:85, cat:1, titel:"F15.1 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Schädlicher Gebrauch •", text:"F15.1 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Schädlicher Gebrauch •" },
+  { id:86, cat:1, titel:"F15.2 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Abhängigkeitssyndrom •", text:"F15.2 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Abhängigkeitssyndrom •" },
+  { id:87, cat:1, titel:"F15.3 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Entzugssyndrom •", text:"F15.3 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Entzugssyndrom •" },
+  { id:88, cat:1, titel:"F15.4 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Entzugssyndrom mit Delir •", text:"F15.4 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Entzugssyndrom mit Delir •" },
+  { id:89, cat:1, titel:"F15.5 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Psychotische Störung •", text:"F15.5 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Psychotische Störung •" },
+  { id:90, cat:1, titel:"F15.6 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Amnestisches Syndrom •", text:"F15.6 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Amnestisches Syndrom •" },
+  { id:91, cat:1, titel:"F15.7 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Restzustand und spät auftretende psychotische Störung •", text:"F15.7 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:92, cat:1, titel:"F15.8 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Sonstige psychische Störungen •", text:"F15.8 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- Sonstige psychische Störungen •" },
+  { id:93, cat:1, titel:"F15.9 – Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- nicht näher bezeichnet •", text:"F15.9 Psychische und Verhaltensstörungen durch sonstige Stimulanzien (einschließlich Koffein) -- nicht näher bezeichnet •" },
+  { id:94, cat:1, titel:"F16.0 – Psychische und Verhaltensstörungen durch Halluzinogene -- Akute Intoxikation •", text:"F16.0 Psychische und Verhaltensstörungen durch Halluzinogene -- Akute Intoxikation •" },
+  { id:95, cat:1, titel:"F16.1 – Psychische und Verhaltensstörungen durch Halluzinogene -- Schädlicher Gebrauch •", text:"F16.1 Psychische und Verhaltensstörungen durch Halluzinogene -- Schädlicher Gebrauch •" },
+  { id:96, cat:1, titel:"F16.2 – Psychische und Verhaltensstörungen durch Halluzinogene -- Abhängigkeitssyndrom •", text:"F16.2 Psychische und Verhaltensstörungen durch Halluzinogene -- Abhängigkeitssyndrom •" },
+  { id:97, cat:1, titel:"F16.3 – Psychische und Verhaltensstörungen durch Halluzinogene -- Entzugssyndrom •", text:"F16.3 Psychische und Verhaltensstörungen durch Halluzinogene -- Entzugssyndrom •" },
+  { id:98, cat:1, titel:"F16.4 – Psychische und Verhaltensstörungen durch Halluzinogene -- Entzugssyndrom mit Delir •", text:"F16.4 Psychische und Verhaltensstörungen durch Halluzinogene -- Entzugssyndrom mit Delir •" },
+  { id:99, cat:1, titel:"F16.5 – Psychische und Verhaltensstörungen durch Halluzinogene -- Psychotische Störung •", text:"F16.5 Psychische und Verhaltensstörungen durch Halluzinogene -- Psychotische Störung •" },
+  { id:100, cat:1, titel:"F16.6 – Psychische und Verhaltensstörungen durch Halluzinogene -- Amnestisches Syndrom •", text:"F16.6 Psychische und Verhaltensstörungen durch Halluzinogene -- Amnestisches Syndrom •" },
+  { id:101, cat:1, titel:"F16.7 – Psychische und Verhaltensstörungen durch Halluzinogene -- Restzustand und spät auftretende psychotische Störung •", text:"F16.7 Psychische und Verhaltensstörungen durch Halluzinogene -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:102, cat:1, titel:"F16.8 – Psychische und Verhaltensstörungen durch Halluzinogene -- Sonstige psychische Störungen •", text:"F16.8 Psychische und Verhaltensstörungen durch Halluzinogene -- Sonstige psychische Störungen •" },
+  { id:103, cat:1, titel:"F16.9 – Psychische und Verhaltensstörungen durch Halluzinogene -- nicht näher bezeichnet •", text:"F16.9 Psychische und Verhaltensstörungen durch Halluzinogene -- nicht näher bezeichnet •" },
+  { id:104, cat:1, titel:"F17.0 – Psychische und Verhaltensstörungen durch Tabak -- Akute Intoxikation •", text:"F17.0 Psychische und Verhaltensstörungen durch Tabak -- Akute Intoxikation •" },
+  { id:105, cat:1, titel:"F17.1 – Psychische und Verhaltensstörungen durch Tabak -- Schädlicher Gebrauch •", text:"F17.1 Psychische und Verhaltensstörungen durch Tabak -- Schädlicher Gebrauch •" },
+  { id:106, cat:1, titel:"F17.2 – Psychische und Verhaltensstörungen durch Tabak -- Abhängigkeitssyndrom •", text:"F17.2 Psychische und Verhaltensstörungen durch Tabak -- Abhängigkeitssyndrom •" },
+  { id:107, cat:1, titel:"F17.3 – Psychische und Verhaltensstörungen durch Tabak -- Entzugssyndrom •", text:"F17.3 Psychische und Verhaltensstörungen durch Tabak -- Entzugssyndrom •" },
+  { id:108, cat:1, titel:"F17.4 – Psychische und Verhaltensstörungen durch Tabak -- Entzugssyndrom mit Delir •", text:"F17.4 Psychische und Verhaltensstörungen durch Tabak -- Entzugssyndrom mit Delir •" },
+  { id:109, cat:1, titel:"F17.5 – Psychische und Verhaltensstörungen durch Tabak -- Psychotische Störung •", text:"F17.5 Psychische und Verhaltensstörungen durch Tabak -- Psychotische Störung •" },
+  { id:110, cat:1, titel:"F17.6 – Psychische und Verhaltensstörungen durch Tabak -- Amnestisches Syndrom •", text:"F17.6 Psychische und Verhaltensstörungen durch Tabak -- Amnestisches Syndrom •" },
+  { id:111, cat:1, titel:"F17.7 – Psychische und Verhaltensstörungen durch Tabak -- Restzustand und spät auftretende psychotische Störung •", text:"F17.7 Psychische und Verhaltensstörungen durch Tabak -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:112, cat:1, titel:"F17.8 – Psychische und Verhaltensstörungen durch Tabak -- Sonstige psychische Störungen •", text:"F17.8 Psychische und Verhaltensstörungen durch Tabak -- Sonstige psychische Störungen •" },
+  { id:113, cat:1, titel:"F17.9 – Psychische und Verhaltensstörungen durch Tabak -- nicht näher bezeichnet •", text:"F17.9 Psychische und Verhaltensstörungen durch Tabak -- nicht näher bezeichnet •" },
+  { id:114, cat:1, titel:"F18.0 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Akute Intoxikation •", text:"F18.0 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Akute Intoxikation •" },
+  { id:115, cat:1, titel:"F18.1 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Schädlicher Gebrauch •", text:"F18.1 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Schädlicher Gebrauch •" },
+  { id:116, cat:1, titel:"F18.2 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Abhängigkeitssyndrom •", text:"F18.2 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Abhängigkeitssyndrom •" },
+  { id:117, cat:1, titel:"F18.3 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Entzugssyndrom •", text:"F18.3 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Entzugssyndrom •" },
+  { id:118, cat:1, titel:"F18.4 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Entzugssyndrom mit Delir •", text:"F18.4 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Entzugssyndrom mit Delir •" },
+  { id:119, cat:1, titel:"F18.5 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Psychotische Störung •", text:"F18.5 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Psychotische Störung •" },
+  { id:120, cat:1, titel:"F18.6 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Amnestisches Syndrom •", text:"F18.6 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Amnestisches Syndrom •" },
+  { id:121, cat:1, titel:"F18.7 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Restzustand und spät auftretende psychotische Störung •", text:"F18.7 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:122, cat:1, titel:"F18.8 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Sonstige psychische Störungen •", text:"F18.8 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- Sonstige psychische Störungen •" },
+  { id:123, cat:1, titel:"F18.9 – Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- nicht näher bezeichnet •", text:"F18.9 Psychische und Verhaltensstörungen durch flüchtige Lösungsmittel -- nicht näher bezeichnet •" },
+  { id:124, cat:1, titel:"F19.0 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Akute Intoxikation •", text:"F19.0 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Akute Intoxikation •" },
+  { id:125, cat:1, titel:"F19.1 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Schädlicher Gebrauch •", text:"F19.1 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Schädlicher Gebrauch •" },
+  { id:126, cat:1, titel:"F19.2 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Abhängigkeitssyndrom •", text:"F19.2 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Abhängigkeitssyndrom •" },
+  { id:127, cat:1, titel:"F19.3 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Entzugssyndrom •", text:"F19.3 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Entzugssyndrom •" },
+  { id:128, cat:1, titel:"F19.4 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Entzugssyndrom mit Delir •", text:"F19.4 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Entzugssyndrom mit Delir •" },
+  { id:129, cat:1, titel:"F19.5 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Psychotische Störung •", text:"F19.5 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Psychotische Störung •" },
+  { id:130, cat:1, titel:"F19.6 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Amnestisches Syndrom •", text:"F19.6 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Amnestisches Syndrom •" },
+  { id:131, cat:1, titel:"F19.7 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Restzustand und spät auftretende psychotische Störung •", text:"F19.7 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Restzustand und spät auftretende psychotische Störung •" },
+  { id:132, cat:1, titel:"F19.8 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Sonstige psychische Störungen •", text:"F19.8 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- Sonstige psychische Störungen •" },
+  { id:133, cat:1, titel:"F19.9 – Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- nicht näher bezeichnet **F1x -- fünfte Stellen (Spezifizierer)** **Akute Intoxikation (F1x.0)** - F1x.00: Akute Intoxikation, unkompliziert - F1x.01: Akute Intoxikation, mit Trauma/anderer körperlicher Verletzung - F1x.02: Akute Intoxikation, mit sonstigen medizinischen Komplikationen - F1x.03: Akute Intoxikation, mit Delir - F1x.04: Akute Intoxikation, mit Wahrnehmungsstörungen - F1x.05: Akute Intoxikation, mit Koma - F1x.06: Akute Intoxikation, mit Krampfanfällen - F1x.07: Pathologische Intoxikation *(nur Alkohol)* **Abhängigkeitssyndrom (F1x.2)** - F1x.20: Gegenwärtig abstinent - F1x.21: Gegenwärtig abstinent, aber in geschützter Umgebung - F1x.22: Klinisch überwachtes Erhaltungs-/Substitutionsregime - F1x.23: Gegenwärtig abstinent, aber Behandlung mit aversiven/blockierenden Medikamenten - F1x.24: Gegenwärtig Substanzgebrauch \[aktive Abhängigkeit\] - F1x.25: Kontinuierlicher Gebrauch - F1x.26: Episodischer Gebrauch \[Dipsomanie\] **Entzugssyndrom (F1x.3)** - F1x.30: Entzugssyndrom, unkompliziert - F1x.31: Entzugssyndrom, mit Krampfanfällen **Entzugssyndrom mit Delir (F1x.4)** - F1x.40: Entzugssyndrom mit Delir, ohne Krampfanfälle - F1x.41: Entzugssyndrom mit Delir, mit Krampfanfällen **Psychotische Störung (F1x.5)** - F1x.50: Psychotische Störung, schizophrenieartig - F1x.51: Psychotische Störung, vorwiegend wahnhaft - F1x.52: Psychotische Störung, vorwiegend halluzinatorisch - F1x.53: Psychotische Störung, vorwiegend polymorph - F1x.54: Psychotische Störung, vorwiegend mit depressiven Symptomen - F1x.55: Psychotische Störung, vorwiegend mit manischen Symptomen - F1x.56: Psychotische Störung, gemischt **Restzustand/Spätbeginn (F1x.7)** - F1x.70: Flashbacks - F1x.71: Persönlichkeits- oder Verhaltensstörung (organisch) - F1x.72: Residuale affektive Störung - F1x.73: Demenz - F1x.74: Sonstige persistierende kognitive Beeinträchtigung - F1x.75: Spätbeginn einer psychotischen Störung *Hinweis: Teilweise existieren **6. Stellen** wie F1x.200 „frühe Remission\", F1x.201 „partielle Remission\", F1x.202 „vollständige Remission\" sowie F1x.240/241 „ohne/mit körperlichen Merkmalen\".* **F20--F29 Schizophrenie, schizotype und wahnhafte Störungen** •", text:"F19.9 Psychische und Verhaltensstörungen durch multiplen Substanzgebrauch und Konsum anderer psychotroper Substanzen -- nicht näher bezeichnet **F1x -- fünfte Stellen (Spezifizierer)** **Akute Intoxikation (F1x.0)** - F1x.00: Akute Intoxikation, unkompliziert - F1x.01: Akute Intoxikation, mit Trauma/anderer körperlicher Verletzung - F1x.02: Akute Intoxikation, mit sonstigen medizinischen Komplikationen - F1x.03: Akute Intoxikation, mit Delir - F1x.04: Akute Intoxikation, mit Wahrnehmungsstörungen - F1x.05: Akute Intoxikation, mit Koma - F1x.06: Akute Intoxikation, mit Krampfanfällen - F1x.07: Pathologische Intoxikation *(nur Alkohol)* **Abhängigkeitssyndrom (F1x.2)** - F1x.20: Gegenwärtig abstinent - F1x.21: Gegenwärtig abstinent, aber in geschützter Umgebung - F1x.22: Klinisch überwachtes Erhaltungs-/Substitutionsregime - F1x.23: Gegenwärtig abstinent, aber Behandlung mit aversiven/blockierenden Medikamenten - F1x.24: Gegenwärtig Substanzgebrauch \[aktive Abhängigkeit\] - F1x.25: Kontinuierlicher Gebrauch - F1x.26: Episodischer Gebrauch \[Dipsomanie\] **Entzugssyndrom (F1x.3)** - F1x.30: Entzugssyndrom, unkompliziert - F1x.31: Entzugssyndrom, mit Krampfanfällen **Entzugssyndrom mit Delir (F1x.4)** - F1x.40: Entzugssyndrom mit Delir, ohne Krampfanfälle - F1x.41: Entzugssyndrom mit Delir, mit Krampfanfällen **Psychotische Störung (F1x.5)** - F1x.50: Psychotische Störung, schizophrenieartig - F1x.51: Psychotische Störung, vorwiegend wahnhaft - F1x.52: Psychotische Störung, vorwiegend halluzinatorisch - F1x.53: Psychotische Störung, vorwiegend polymorph - F1x.54: Psychotische Störung, vorwiegend mit depressiven Symptomen - F1x.55: Psychotische Störung, vorwiegend mit manischen Symptomen - F1x.56: Psychotische Störung, gemischt **Restzustand/Spätbeginn (F1x.7)** - F1x.70: Flashbacks - F1x.71: Persönlichkeits- oder Verhaltensstörung (organisch) - F1x.72: Residuale affektive Störung - F1x.73: Demenz - F1x.74: Sonstige persistierende kognitive Beeinträchtigung - F1x.75: Spätbeginn einer psychotischen Störung *Hinweis: Teilweise existieren **6. Stellen** wie F1x.200 „frühe Remission\", F1x.201 „partielle Remission\", F1x.202 „vollständige Remission\" sowie F1x.240/241 „ohne/mit körperlichen Merkmalen\".* **F20--F29 Schizophrenie, schizotype und wahnhafte Störungen** •" },
+  { id:134, cat:2, titel:"F20.0 – Schizophrenie, paranoider Typ •", text:"F20.0 Schizophrenie, paranoider Typ •" },
+  { id:135, cat:2, titel:"F20.1 – Schizophrenie, hebephrener Typ •", text:"F20.1 Schizophrenie, hebephrener Typ •" },
+  { id:136, cat:2, titel:"F20.2 – Schizophrenie, katatoner Typ •", text:"F20.2 Schizophrenie, katatoner Typ •" },
+  { id:137, cat:2, titel:"F20.3 – Schizophrenie, undifferenzierter Typ •", text:"F20.3 Schizophrenie, undifferenzierter Typ •" },
+  { id:138, cat:2, titel:"F20.4 – Postschizophrene Depression •", text:"F20.4 Postschizophrene Depression •" },
+  { id:139, cat:2, titel:"F20.5 – Schizophrenie, Residualzustand •", text:"F20.5 Schizophrenie, Residualzustand •" },
+  { id:140, cat:2, titel:"F20.6 – Schizophrenia simplex •", text:"F20.6 Schizophrenia simplex •" },
+  { id:141, cat:2, titel:"F20.8 – Schizophrenie, sonstige •", text:"F20.8 Schizophrenie, sonstige •" },
+  { id:142, cat:2, titel:"F20.9 – Schizophrenie, nicht näher bezeichnet •", text:"F20.9 Schizophrenie, nicht näher bezeichnet •" },
+  { id:143, cat:2, titel:"F21 – Schizotype Störung •", text:"F21 Schizotype Störung •" },
+  { id:144, cat:2, titel:"F22.0 – Anhaltende wahnhafte Störung •", text:"F22.0 Anhaltende wahnhafte Störung •" },
+  { id:145, cat:2, titel:"F22.8 – Anhaltende wahnhafte Störungen, sonstige •", text:"F22.8 Anhaltende wahnhafte Störungen, sonstige •" },
+  { id:146, cat:2, titel:"F22.9 – Anhaltende wahnhafte Störung, nicht näher bezeichnet •", text:"F22.9 Anhaltende wahnhafte Störung, nicht näher bezeichnet •" },
+  { id:147, cat:2, titel:"F23.0 – Akute polymorphe psychotische Störung ohne Symptome einer Schizophrenie •", text:"F23.0 Akute polymorphe psychotische Störung ohne Symptome einer Schizophrenie •" },
+  { id:148, cat:2, titel:"F23.1 – Akute polymorphe psychotische Störung mit Symptomen einer Schizophrenie •", text:"F23.1 Akute polymorphe psychotische Störung mit Symptomen einer Schizophrenie •" },
+  { id:149, cat:2, titel:"F23.2 – Akute schizophreniforme psychotische Störung •", text:"F23.2 Akute schizophreniforme psychotische Störung •" },
+  { id:150, cat:2, titel:"F23.3 – Sonstige akute vorübergehende psychotische Störungen •", text:"F23.3 Sonstige akute vorübergehende psychotische Störungen •" },
+  { id:151, cat:2, titel:"F23.8 – Akute vorübergehende psychotische Störungen, sonstige •", text:"F23.8 Akute vorübergehende psychotische Störungen, sonstige •" },
+  { id:152, cat:2, titel:"F23.9 – Akute vorübergehende psychotische Störung, nicht näher bezeichnet •", text:"F23.9 Akute vorübergehende psychotische Störung, nicht näher bezeichnet •" },
+  { id:153, cat:2, titel:"F24 – Induzierte wahnhafte Störung •", text:"F24 Induzierte wahnhafte Störung •" },
+  { id:154, cat:2, titel:"F25.0 – Schizoaffektive Störung, manischer Typ •", text:"F25.0 Schizoaffektive Störung, manischer Typ •" },
+  { id:155, cat:2, titel:"F25.1 – Schizoaffektive Störung, depressiver Typ •", text:"F25.1 Schizoaffektive Störung, depressiver Typ •" },
+  { id:156, cat:2, titel:"F25.2 – Schizoaffektive Störung, gemischter Typ •", text:"F25.2 Schizoaffektive Störung, gemischter Typ •" },
+  { id:157, cat:2, titel:"F25.8 – Schizoaffektive Störung, sonstige •", text:"F25.8 Schizoaffektive Störung, sonstige •" },
+  { id:158, cat:2, titel:"F25.9 – Schizoaffektive Störung, nicht näher bezeichnet •", text:"F25.9 Schizoaffektive Störung, nicht näher bezeichnet •" },
+  { id:159, cat:2, titel:"F28 – Sonstige nichtorganische Psychosen •", text:"F28 Sonstige nichtorganische Psychosen •" },
+  { id:160, cat:2, titel:"F29 – Nichtorganische Psychose, nicht näher bezeichnet **F30--F39 Affektive Störungen** •", text:"F29 Nichtorganische Psychose, nicht näher bezeichnet **F30--F39 Affektive Störungen** •" },
+  { id:161, cat:3, titel:"F30.0 – Hypomanie Dauer / Grundmuster **Dauer / Grundmuster** - **Anhaltend** leicht gehobene, expansive **oder** gereizte Stimmung **über mindestens einige Tage**, mit **deutlich gesteigertem Antrieb/Aktivität**. **Typische Symptome (mehrere müssen deutlich vorliegen)** - Gesteigerte **Geselligkeit/Gesprächigkeit**, **übermäßige Vertraulichkeit**. - **Verringertes Schlafbedürfnis**. - **Gesteigerte Libido**. - **Ablenkbarkeit/Konzentrationsstörungen**, **Rededrang/Ideenflucht**, **Unruhe/mehr Aktivität**. - **Überoptimismus/Selbstüberschätzung**, **Leichtsinn** (z. B. Ausgaben, riskantes Verhalten). **Schweregrad / Abgrenzung** - **Keine** Halluzinationen oder Wahn (sonst **Manie mit Psychose**, F30.2). - Die Beeinträchtigung ist **geringer** als bei Manie (i. d. R. kein Berufsabbruch, keine notwendige Hospitalisierung allein wegen der Stimmung). **Ausschluss** - Nicht besser erklärbar durch **psychotrope Substanzen** (F1x) oder **organische** Ursachen (F0). **Kodierhinweise** - **F30.0 = Hypomanie**; bei bipolarer Störung: **F31.0** „gegenwärtig hypoman\" (mit weiterer affektiver Episode in der Vorgeschichte). •", text:"F30.0 Hypomanie Dauer / Grundmuster **Dauer / Grundmuster** - **Anhaltend** leicht gehobene, expansive **oder** gereizte Stimmung **über mindestens einige Tage**, mit **deutlich gesteigertem Antrieb/Aktivität**. **Typische Symptome (mehrere müssen deutlich vorliegen)** - Gesteigerte **Geselligkeit/Gesprächigkeit**, **übermäßige Vertraulichkeit**. - **Verringertes Schlafbedürfnis**. - **Gesteigerte Libido**. - **Ablenkbarkeit/Konzentrationsstörungen**, **Rededrang/Ideenflucht**, **Unruhe/mehr Aktivität**. - **Überoptimismus/Selbstüberschätzung**, **Leichtsinn** (z. B. Ausgaben, riskantes Verhalten). **Schweregrad / Abgrenzung** - **Keine** Halluzinationen oder Wahn (sonst **Manie mit Psychose**, F30.2). - Die Beeinträchtigung ist **geringer** als bei Manie (i. d. R. kein Berufsabbruch, keine notwendige Hospitalisierung allein wegen der Stimmung). **Ausschluss** - Nicht besser erklärbar durch **psychotrope Substanzen** (F1x) oder **organische** Ursachen (F0). **Kodierhinweise** - **F30.0 = Hypomanie**; bei bipolarer Störung: **F31.0** „gegenwärtig hypoman\" (mit weiterer affektiver Episode in der Vorgeschichte). •" },
+  { id:162, cat:3, titel:"F30.1 – Manie ohne psychotische Symptome •", text:"F30.1 Manie ohne psychotische Symptome •" },
+  { id:163, cat:3, titel:"F30.2 – Manie mit psychotischen Symptomen •", text:"F30.2 Manie mit psychotischen Symptomen •" },
+  { id:164, cat:3, titel:"F30.8 – Manische Episode, sonstige •", text:"F30.8 Manische Episode, sonstige •" },
+  { id:165, cat:3, titel:"F30.9 – Manische Episode, nicht näher bezeichnet •", text:"F30.9 Manische Episode, nicht näher bezeichnet •" },
+  { id:166, cat:3, titel:"F31.0 – Bipolare Störung, gegenwärtig hypoman •", text:"F31.0 Bipolare Störung, gegenwärtig hypoman •" },
+  { id:167, cat:3, titel:"F31.1 – Bipolare Störung, gegenwärtig manisch ohne psychotische Symptome •", text:"F31.1 Bipolare Störung, gegenwärtig manisch ohne psychotische Symptome •" },
+  { id:168, cat:3, titel:"F31.2 – Bipolare Störung, gegenwärtig manisch mit psychotischen Symptomen •", text:"F31.2 Bipolare Störung, gegenwärtig manisch mit psychotischen Symptomen •" },
+  { id:169, cat:3, titel:"F31.3 – Bipolare Störung, gegenwärtig leicht/mittelgradig depressiv •", text:"F31.3 Bipolare Störung, gegenwärtig leicht/mittelgradig depressiv •" },
+  { id:170, cat:3, titel:"F31.30 – Bipolare affektive Störung -- gegenwärtig leichte/mittelgradige depressive Episode, ohne somatisches Syndrom •", text:"F31.30 Bipolare affektive Störung -- gegenwärtig leichte/mittelgradige depressive Episode, ohne somatisches Syndrom •" },
+  { id:171, cat:3, titel:"F31.31 – Bipolare affektive Störung -- gegenwärtig leichte/mittelgradige depressive Episode, mit somatischem Syndrom •", text:"F31.31 Bipolare affektive Störung -- gegenwärtig leichte/mittelgradige depressive Episode, mit somatischem Syndrom •" },
+  { id:172, cat:3, titel:"F31.4 – Bipolare Störung, gegenwärtig schwer depressiv ohne psychotische Symptome •", text:"F31.4 Bipolare Störung, gegenwärtig schwer depressiv ohne psychotische Symptome •" },
+  { id:173, cat:3, titel:"F31.5 – Bipolare Störung, gegenwärtig schwer depressiv mit psychotischen Symptomen •", text:"F31.5 Bipolare Störung, gegenwärtig schwer depressiv mit psychotischen Symptomen •" },
+  { id:174, cat:3, titel:"F31.6 – Bipolare Störung, gegenwärtig gemischt •", text:"F31.6 Bipolare Störung, gegenwärtig gemischt •" },
+  { id:175, cat:3, titel:"F31.7 – Bipolare Störung, gegenwärtig remittiert •", text:"F31.7 Bipolare Störung, gegenwärtig remittiert •" },
+  { id:176, cat:3, titel:"F31.8 – Bipolare Störung, sonstige •", text:"F31.8 Bipolare Störung, sonstige •" },
+  { id:177, cat:3, titel:"F31.9 – Bipolare Störung, nicht näher bezeichnet •", text:"F31.9 Bipolare Störung, nicht näher bezeichnet •" },
+  { id:178, cat:3, titel:"F32.0 – Depressive Episode, leicht •", text:"F32.0 Depressive Episode, leicht •" },
+  { id:179, cat:3, titel:"F32.00 – Leichte depressive Episode -- ohne somatisches Syndrom •", text:"F32.00 Leichte depressive Episode -- ohne somatisches Syndrom •" },
+  { id:180, cat:3, titel:"F32.01 – Leichte depressive Episode -- mit somatischem Syndrom •", text:"F32.01 Leichte depressive Episode -- mit somatischem Syndrom •" },
+  { id:181, cat:3, titel:"F32.1 – Depressive Episode, mittelgradig •", text:"F32.1 Depressive Episode, mittelgradig •" },
+  { id:182, cat:3, titel:"F32.10 – Mittelgradige depressive Episode -- ohne somatisches Syndrom •", text:"F32.10 Mittelgradige depressive Episode -- ohne somatisches Syndrom •" },
+  { id:183, cat:3, titel:"F32.11 – Mittelgradige depressive Episode -- mit somatischem Syndrom •", text:"F32.11 Mittelgradige depressive Episode -- mit somatischem Syndrom •" },
+  { id:184, cat:3, titel:"F32.2 – Depressive Episode, schwer ohne psychotische Symptome •", text:"F32.2 Depressive Episode, schwer ohne psychotische Symptome •" },
+  { id:185, cat:3, titel:"F32.3 – Depressive Episode, schwer mit psychotischen Symptomen •", text:"F32.3 Depressive Episode, schwer mit psychotischen Symptomen •" },
+  { id:186, cat:3, titel:"F32.8 – Depressive Episode, sonstige •", text:"F32.8 Depressive Episode, sonstige •" },
+  { id:187, cat:3, titel:"F32.9 – Depressive Episode, nicht näher bezeichnet •", text:"F32.9 Depressive Episode, nicht näher bezeichnet •" },
+  { id:188, cat:3, titel:"F33.0 – Rezidivierende Depression, gegenwärtig leichte Episode •", text:"F33.0 Rezidivierende Depression, gegenwärtig leichte Episode •" },
+  { id:189, cat:3, titel:"F33.00 – Rezidivierende depressive Störung, gegenwärtig leichte Episode -- ohne somatisches Syndrom •", text:"F33.00 Rezidivierende depressive Störung, gegenwärtig leichte Episode -- ohne somatisches Syndrom •" },
+  { id:190, cat:3, titel:"F33.01 – Rezidivierende depressive Störung, gegenwärtig leichte Episode -- mit somatischem Syndrom •", text:"F33.01 Rezidivierende depressive Störung, gegenwärtig leichte Episode -- mit somatischem Syndrom •" },
+  { id:191, cat:3, titel:"F33.1 – Rezidivierende Depression, gegenwärtig mittelgradige Episode •", text:"F33.1 Rezidivierende Depression, gegenwärtig mittelgradige Episode •" },
+  { id:192, cat:3, titel:"F33.10 – Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode -- ohne somatisches Syndrom •", text:"F33.10 Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode -- ohne somatisches Syndrom •" },
+  { id:193, cat:3, titel:"F33.11 – Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode -- mit somatischem Syndrom •", text:"F33.11 Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode -- mit somatischem Syndrom •" },
+  { id:194, cat:3, titel:"F33.2 – Rezidivierende Depression, gegenwärtig schwer ohne psychotische Symptome •", text:"F33.2 Rezidivierende Depression, gegenwärtig schwer ohne psychotische Symptome •" },
+  { id:195, cat:3, titel:"F33.3 – Rezidivierende Depression, gegenwärtig schwer mit psychotischen Symptomen •", text:"F33.3 Rezidivierende Depression, gegenwärtig schwer mit psychotischen Symptomen •" },
+  { id:196, cat:3, titel:"F33.4 – Rezidivierende Depression, gegenwärtig remittiert •", text:"F33.4 Rezidivierende Depression, gegenwärtig remittiert •" },
+  { id:197, cat:3, titel:"F33.8 – Rezidivierende Depression, sonstige •", text:"F33.8 Rezidivierende Depression, sonstige •" },
+  { id:198, cat:3, titel:"F33.9 – Rezidivierende Depression, nicht näher bezeichnet •", text:"F33.9 Rezidivierende Depression, nicht näher bezeichnet •" },
+  { id:199, cat:3, titel:"F34.0 – Zyklothymia =\* •", text:"F34.0 Zyklothymia =\* •" },
+  { id:200, cat:3, titel:"F34.8 – Anhaltende affektive Störungen, sonstige •", text:"F34.8 Anhaltende affektive Störungen, sonstige •" },
+  { id:201, cat:3, titel:"F34.9 – Anhaltende affektive Störung, nicht näher bezeichnet •", text:"F34.9 Anhaltende affektive Störung, nicht näher bezeichnet •" },
+  { id:202, cat:3, titel:"F38.0 – Sonstige einzelne affektive Störungen •", text:"F38.0 Sonstige einzelne affektive Störungen •" },
+  { id:203, cat:3, titel:"F38.00 – Gemischte affektive Episode •", text:"F38.00 Gemischte affektive Episode •" },
+  { id:204, cat:3, titel:"F38.1 – Sonstige rezidivierende affektive Störungen •", text:"F38.1 Sonstige rezidivierende affektive Störungen •" },
+  { id:205, cat:3, titel:"F38.10 – Rezidivierende kurze depressive Störung •", text:"F38.10 Rezidivierende kurze depressive Störung •" },
+  { id:206, cat:3, titel:"F38.11 – Andere rezidivierende affektive Störungen -- saisonale affektive Störung •", text:"F38.11 Andere rezidivierende affektive Störungen -- saisonale affektive Störung •" },
+  { id:207, cat:3, titel:"F38.12 – Andere rezidivierende affektive Störungen -- rezidivierende gemischte affektive Episoden •", text:"F38.12 Andere rezidivierende affektive Störungen -- rezidivierende gemischte affektive Episoden •" },
+  { id:208, cat:3, titel:"F38.8 – Sonstige näher bezeichnete affektive Störungen •", text:"F38.8 Sonstige näher bezeichnete affektive Störungen •" },
+  { id:209, cat:3, titel:"F39 – Affektive Störung, nicht näher bezeichnet **F40--F48 Neurotische, Belastungs- und somatoforme Störungen** •", text:"F39 Affektive Störung, nicht näher bezeichnet **F40--F48 Neurotische, Belastungs- und somatoforme Störungen** •" },
+  { id:210, cat:4, titel:"F40.0 – Agoraphobie •", text:"F40.0 Agoraphobie •" },
+  { id:211, cat:4, titel:"F40.00 – Agoraphobie, ohne Panikstörung •", text:"F40.00 Agoraphobie, ohne Panikstörung •" },
+  { id:212, cat:4, titel:"F40.01 – Agoraphobie, mit Panikstörung •", text:"F40.01 Agoraphobie, mit Panikstörung •" },
+  { id:213, cat:4, titel:"F40.1 – Soziale Phobien •", text:"F40.1 Soziale Phobien •" },
+  { id:214, cat:4, titel:"F40.2 – Spezifische (isolierte) Phobien •", text:"F40.2 Spezifische (isolierte) Phobien •" },
+  { id:215, cat:4, titel:"F40.8 – Phobische Störungen, sonstige •", text:"F40.8 Phobische Störungen, sonstige •" },
+  { id:216, cat:4, titel:"F40.9 – Phobische Störung, nicht näher bezeichnet •", text:"F40.9 Phobische Störung, nicht näher bezeichnet •" },
+  { id:217, cat:4, titel:"F41.0 – Panikstörung (episodisch paroxysmale Angst) •", text:"F41.0 Panikstörung (episodisch paroxysmale Angst) •" },
+  { id:218, cat:4, titel:"F41.1 – Generalisierte Angststörung #•", text:"F41.1 Generalisierte Angststörung #•" },
+  { id:219, cat:4, titel:"F41.3 – Sonstige gemischte Angststörungen •", text:"F41.3 Sonstige gemischte Angststörungen •" },
+  { id:220, cat:4, titel:"F41.8 – Angststörungen, sonstige •", text:"F41.8 Angststörungen, sonstige •" },
+  { id:221, cat:4, titel:"F41.9 – Angststörung, nicht näher bezeichnet •", text:"F41.9 Angststörung, nicht näher bezeichnet •" },
+  { id:222, cat:4, titel:"F42.0 – Zwangsstörung, vorwiegend Zwangsgedanken •", text:"F42.0 Zwangsstörung, vorwiegend Zwangsgedanken •" },
+  { id:223, cat:4, titel:"F42.1 – Zwangsstörung, vorwiegend Zwangshandlungen •", text:"F42.1 Zwangsstörung, vorwiegend Zwangshandlungen •" },
+  { id:224, cat:4, titel:"F42.2 – Zwangsstörung, gemischt •", text:"F42.2 Zwangsstörung, gemischt •" },
+  { id:225, cat:4, titel:"F42.8 – Zwangsstörungen, sonstige •", text:"F42.8 Zwangsstörungen, sonstige •" },
+  { id:226, cat:4, titel:"F42.9 – Zwangsstörung, nicht näher bezeichnet •", text:"F42.9 Zwangsstörung, nicht näher bezeichnet •" },
+  { id:227, cat:4, titel:"F43.0 – Akute Belastungsreaktion •", text:"F43.0 Akute Belastungsreaktion •" },
+  { id:228, cat:4, titel:"F43.1 – Posttraumatische Belastungsstörung •", text:"F43.1 Posttraumatische Belastungsstörung •" },
+  { id:229, cat:4, titel:"F43.2 – Anpassungsstörungen •", text:"F43.2 Anpassungsstörungen •" },
+  { id:230, cat:4, titel:"F43.20 – Anpassungsstörung -- kurze depressive Reaktion •", text:"F43.20 Anpassungsstörung -- kurze depressive Reaktion •" },
+  { id:231, cat:4, titel:"F43.21 – Anpassungsstörung -- längere depressive Reaktion •", text:"F43.21 Anpassungsstörung -- längere depressive Reaktion •" },
+  { id:232, cat:4, titel:"F43.22 – Anpassungsstörung -- Angst und depressive Reaktion, gemischt •", text:"F43.22 Anpassungsstörung -- Angst und depressive Reaktion, gemischt •" },
+  { id:233, cat:4, titel:"F43.23 – Anpassungsstörung -- mit vorwiegender Beeinträchtigung anderer Gefühle •", text:"F43.23 Anpassungsstörung -- mit vorwiegender Beeinträchtigung anderer Gefühle •" },
+  { id:234, cat:4, titel:"F43.24 – Anpassungsstörung -- mit vorwiegender Störung des Sozialverhaltens •", text:"F43.24 Anpassungsstörung -- mit vorwiegender Störung des Sozialverhaltens •" },
+  { id:235, cat:4, titel:"F43.25 – Anpassungsstörung -- mit gemischter Störung von Gefühlen und Sozialverhalten •", text:"F43.25 Anpassungsstörung -- mit gemischter Störung von Gefühlen und Sozialverhalten •" },
+  { id:236, cat:4, titel:"F43.28 – Anpassungsstörung -- sonstige näher bezeichnete vorherrschende Symptome •", text:"F43.28 Anpassungsstörung -- sonstige näher bezeichnete vorherrschende Symptome •" },
+  { id:237, cat:4, titel:"F43.29 – Anpassungsstörung -- nicht näher bezeichnet •", text:"F43.29 Anpassungsstörung -- nicht näher bezeichnet •" },
+  { id:238, cat:4, titel:"F43.8 – Reaktionen auf schwere Belastungen, sonstige •", text:"F43.8 Reaktionen auf schwere Belastungen, sonstige •" },
+  { id:239, cat:4, titel:"F43.9 – Reaktion auf schwere Belastung, nicht näher bezeichnet •", text:"F43.9 Reaktion auf schwere Belastung, nicht näher bezeichnet •" },
+  { id:240, cat:4, titel:"F44.0 – Dissoziative Amnesie •", text:"F44.0 Dissoziative Amnesie •" },
+  { id:241, cat:4, titel:"F44.1 – Dissoziative Fugue •", text:"F44.1 Dissoziative Fugue •" },
+  { id:242, cat:4, titel:"F44.2 – Dissoziativer Stupor •", text:"F44.2 Dissoziativer Stupor •" },
+  { id:243, cat:4, titel:"F44.3 – Trance- und Besessenheitszustände •", text:"F44.3 Trance- und Besessenheitszustände •" },
+  { id:244, cat:4, titel:"F44.4 – Dissoziative Bewegungsstörungen •", text:"F44.4 Dissoziative Bewegungsstörungen •" },
+  { id:245, cat:4, titel:"F44.5 – Dissoziative Krampfanfälle •", text:"F44.5 Dissoziative Krampfanfälle •" },
+  { id:246, cat:4, titel:"F44.6 – Dissoziative Sensibilitäts- und Empfindungsstörungen •", text:"F44.6 Dissoziative Sensibilitäts- und Empfindungsstörungen •" },
+  { id:247, cat:4, titel:"F44.7 – Dissoziative Störung, gemischt •", text:"F44.7 Dissoziative Störung, gemischt •" },
+  { id:248, cat:4, titel:"F44.8 – Dissoziative Störungen, sonstige •", text:"F44.8 Dissoziative Störungen, sonstige •" },
+  { id:249, cat:4, titel:"F44.80 – Ganser-Syndrom •", text:"F44.80 Ganser-Syndrom •" },
+  { id:250, cat:4, titel:"F44.81 – Dissoziative Identitätsstörung (multiple Persönlichkeit) •", text:"F44.81 Dissoziative Identitätsstörung (multiple Persönlichkeit) •" },
+  { id:251, cat:4, titel:"F44.82 – Transitorische dissoziative Störungen in Kindheit und Jugend •", text:"F44.82 Transitorische dissoziative Störungen in Kindheit und Jugend •" },
+  { id:252, cat:4, titel:"F44.88 – Sonstige dissoziative Störungen •", text:"F44.88 Sonstige dissoziative Störungen •" },
+  { id:253, cat:4, titel:"F44.9 – Dissoziative Störung, nicht näher bezeichnet •", text:"F44.9 Dissoziative Störung, nicht näher bezeichnet •" },
+  { id:254, cat:4, titel:"F45.0 – Somatisierungsstörung •", text:"F45.0 Somatisierungsstörung •" },
+  { id:255, cat:4, titel:"F45.1 – Undifferenzierte somatoforme Störung •", text:"F45.1 Undifferenzierte somatoforme Störung •" },
+  { id:256, cat:4, titel:"F45.2 – Hypochondrische Störung •", text:"F45.2 Hypochondrische Störung •" },
+  { id:257, cat:4, titel:"F45.3 – Somatoforme autonome Funktionsstörung •", text:"F45.3 Somatoforme autonome Funktionsstörung •" },
+  { id:258, cat:4, titel:"F45.4 – Anhaltende somatoforme Schmerzstörung •", text:"F45.4 Anhaltende somatoforme Schmerzstörung •" },
+  { id:259, cat:4, titel:"F45.8 – Somatoforme Störungen, sonstige •", text:"F45.8 Somatoforme Störungen, sonstige •" },
+  { id:260, cat:4, titel:"F45.9 – Somatoforme Störung, nicht näher bezeichnet •", text:"F45.9 Somatoforme Störung, nicht näher bezeichnet •" },
+  { id:261, cat:4, titel:"F48.0 – Neurasthenie •", text:"F48.0 Neurasthenie •" },
+  { id:262, cat:4, titel:"F48.1 – Depersonalisations-/Derealisationssyndrom •", text:"F48.1 Depersonalisations-/Derealisationssyndrom •" },
+  { id:263, cat:4, titel:"F48.8 – Sonstige neurotische Störungen •", text:"F48.8 Sonstige neurotische Störungen •" },
+  { id:264, cat:4, titel:"F48.9 – Neurotische Störung, nicht näher bezeichnet **F50--F59 Verhaltensauffälligkeiten mit körperlichen Störungen und Faktoren** •", text:"F48.9 Neurotische Störung, nicht näher bezeichnet **F50--F59 Verhaltensauffälligkeiten mit körperlichen Störungen und Faktoren** •" },
+  { id:265, cat:5, titel:"F50.0 – Anorexia nervosa •", text:"F50.0 Anorexia nervosa •" },
+  { id:266, cat:5, titel:"F50.1 – Atypische Anorexia nervosa •", text:"F50.1 Atypische Anorexia nervosa •" },
+  { id:267, cat:5, titel:"F50.2 – Bulimia nervosa •", text:"F50.2 Bulimia nervosa •" },
+  { id:268, cat:5, titel:"F50.3 – Atypische Bulimie •", text:"F50.3 Atypische Bulimie •" },
+  { id:269, cat:5, titel:"F50.4 – Essanfälle bei anderen psychischen Störungen •", text:"F50.4 Essanfälle bei anderen psychischen Störungen •" },
+  { id:270, cat:5, titel:"F50.5 – Erbrechen bei anderen psychischen Störungen •", text:"F50.5 Erbrechen bei anderen psychischen Störungen •" },
+  { id:271, cat:5, titel:"F50.8 – Essstörungen, sonstige •", text:"F50.8 Essstörungen, sonstige •" },
+  { id:272, cat:5, titel:"F50.9 – Essstörung, nicht näher bezeichnet •", text:"F50.9 Essstörung, nicht näher bezeichnet •" },
+  { id:273, cat:5, titel:"F51.0 – Nichtorganische Insomnie •", text:"F51.0 Nichtorganische Insomnie •" },
+  { id:274, cat:5, titel:"F51.1 – Nichtorganische Hypersomnie •", text:"F51.1 Nichtorganische Hypersomnie •" },
+  { id:275, cat:5, titel:"F51.2 – Störung des Schlaf-Wach-Rhythmus •", text:"F51.2 Störung des Schlaf-Wach-Rhythmus •" },
+  { id:276, cat:5, titel:"F51.3 – Schlafwandeln •", text:"F51.3 Schlafwandeln •" },
+  { id:277, cat:5, titel:"F51.4 – Pavor nocturnus •", text:"F51.4 Pavor nocturnus •" },
+  { id:278, cat:5, titel:"F51.5 – Albträume •", text:"F51.5 Albträume •" },
+  { id:279, cat:5, titel:"F51.8 – Nichtorganische Schlafstörungen, sonstige •", text:"F51.8 Nichtorganische Schlafstörungen, sonstige •" },
+  { id:280, cat:5, titel:"F51.9 – Nichtorganische Schlafstörung, nicht näher bezeichnet •", text:"F51.9 Nichtorganische Schlafstörung, nicht näher bezeichnet •" },
+  { id:281, cat:5, titel:"F52.0 – Mangel/Verlust sexuellen Verlangens •", text:"F52.0 Mangel/Verlust sexuellen Verlangens •" },
+  { id:282, cat:5, titel:"F52.1 – Sexuelle Aversion/fehlende Befriedigung •", text:"F52.1 Sexuelle Aversion/fehlende Befriedigung •" },
+  { id:283, cat:5, titel:"F52.2 – Versagen genitaler Reaktionen •", text:"F52.2 Versagen genitaler Reaktionen •" },
+  { id:284, cat:5, titel:"F52.3 – Orgasmusstörung •", text:"F52.3 Orgasmusstörung •" },
+  { id:285, cat:5, titel:"F52.4 – Vorzeitiger Samenerguss •", text:"F52.4 Vorzeitiger Samenerguss •" },
+  { id:286, cat:5, titel:"F52.5 – Nichtorganischer Vaginismus •", text:"F52.5 Nichtorganischer Vaginismus •" },
+  { id:287, cat:5, titel:"F52.6 – Nichtorganische Dyspareunie •", text:"F52.6 Nichtorganische Dyspareunie •" },
+  { id:288, cat:5, titel:"F52.7 – Gesteigertes sexuelles Verlangen •", text:"F52.7 Gesteigertes sexuelles Verlangen •" },
+  { id:289, cat:5, titel:"F52.8 – Nichtorganische Sexualfunktionsstörungen, sonstige •", text:"F52.8 Nichtorganische Sexualfunktionsstörungen, sonstige •" },
+  { id:290, cat:5, titel:"F52.9 – Nichtorganische Sexualfunktionsstörung, nicht näher bezeichnet •", text:"F52.9 Nichtorganische Sexualfunktionsstörung, nicht näher bezeichnet •" },
+  { id:291, cat:5, titel:"F53.0 – Psychische und Verhaltensstörungen im Wochenbett, leicht •", text:"F53.0 Psychische und Verhaltensstörungen im Wochenbett, leicht •" },
+  { id:292, cat:5, titel:"F53.1 – Psychische und Verhaltensstörungen im Wochenbett, schwer •", text:"F53.1 Psychische und Verhaltensstörungen im Wochenbett, schwer •" },
+  { id:293, cat:5, titel:"F53.8 – Psychische und Verhaltensstörungen im Wochenbett, sonstige •", text:"F53.8 Psychische und Verhaltensstörungen im Wochenbett, sonstige •" },
+  { id:294, cat:5, titel:"F53.9 – Psychische und Verhaltensstörung im Wochenbett, nicht näher bezeichnet •", text:"F53.9 Psychische und Verhaltensstörung im Wochenbett, nicht näher bezeichnet •" },
+  { id:295, cat:5, titel:"F54 – Psychologische/Verhaltensfaktoren bei andernorts klassifizierten Krankheiten •", text:"F54 Psychologische/Verhaltensfaktoren bei andernorts klassifizierten Krankheiten •" },
+  { id:296, cat:5, titel:"F55 – Missbrauch nichtabhängigkeitserzeugender Substanzen •", text:"F55 Missbrauch nichtabhängigkeitserzeugender Substanzen •" },
+  { id:297, cat:5, titel:"F59 – Nicht näher bezeichnete Verhaltensauffälligkeiten bei körperlichen Störungen und Faktoren **F60--F69 Persönlichkeits- und Verhaltensstörungen** •", text:"F59 Nicht näher bezeichnete Verhaltensauffälligkeiten bei körperlichen Störungen und Faktoren **F60--F69 Persönlichkeits- und Verhaltensstörungen** •" },
+  { id:298, cat:6, titel:"F60.0 – Paranoide Persönlichkeitsstörung •", text:"F60.0 Paranoide Persönlichkeitsstörung •" },
+  { id:299, cat:6, titel:"F60.1 – Schizoide Persönlichkeitsstörung •", text:"F60.1 Schizoide Persönlichkeitsstörung •" },
+  { id:300, cat:6, titel:"F60.2 – Dissoziale Persönlichkeitsstörung •", text:"F60.2 Dissoziale Persönlichkeitsstörung •" },
+  { id:301, cat:6, titel:"F60.30 – Emotional instabile Persönlichkeitsstörung, impulsiver Typ •", text:"F60.30 Emotional instabile Persönlichkeitsstörung, impulsiver Typ •" },
+  { id:302, cat:6, titel:"F60.31 – Emotional instabile Persönlichkeitsstörung, Borderline-Typ •", text:"F60.31 Emotional instabile Persönlichkeitsstörung, Borderline-Typ •" },
+  { id:303, cat:6, titel:"F60.4 – Histrionische Persönlichkeitsstörung •", text:"F60.4 Histrionische Persönlichkeitsstörung •" },
+  { id:304, cat:6, titel:"F60.5 – Anankastische Persönlichkeitsstörung •", text:"F60.5 Anankastische Persönlichkeitsstörung •" },
+  { id:305, cat:6, titel:"F60.6 – Ängstliche (vermeidende) Persönlichkeitsstörung •", text:"F60.6 Ängstliche (vermeidende) Persönlichkeitsstörung •" },
+  { id:306, cat:6, titel:"F60.7 – Abhängige (asthenische) Persönlichkeitsstörung •", text:"F60.7 Abhängige (asthenische) Persönlichkeitsstörung •" },
+  { id:307, cat:6, titel:"F60.8 – Spezifische Persönlichkeitsstörungen, sonstige •", text:"F60.8 Spezifische Persönlichkeitsstörungen, sonstige •" },
+  { id:308, cat:6, titel:"F60.9 – Spezifische Persönlichkeitsstörung, nicht näher bezeichnet •", text:"F60.9 Spezifische Persönlichkeitsstörung, nicht näher bezeichnet •" },
+  { id:309, cat:6, titel:"F61 – Kombinierte/sonstige Persönlichkeitsstörungen •", text:"F61 Kombinierte/sonstige Persönlichkeitsstörungen •" },
+  { id:310, cat:6, titel:"F62.0 – Andauernde Persönlichkeitsänderung nach Extrembelastung •", text:"F62.0 Andauernde Persönlichkeitsänderung nach Extrembelastung •" },
+  { id:311, cat:6, titel:"F62.1 – Andauernde Persönlichkeitsänderung nach psychischer Krankheit •", text:"F62.1 Andauernde Persönlichkeitsänderung nach psychischer Krankheit •" },
+  { id:312, cat:6, titel:"F62.8 – Andauernde Persönlichkeitsänderungen, sonstige •", text:"F62.8 Andauernde Persönlichkeitsänderungen, sonstige •" },
+  { id:313, cat:6, titel:"F62.9 – Andauernde Persönlichkeitsänderung, nicht näher bezeichnet •", text:"F62.9 Andauernde Persönlichkeitsänderung, nicht näher bezeichnet •" },
+  { id:314, cat:6, titel:"F63.0 – Pathologisches Spielen •", text:"F63.0 Pathologisches Spielen •" },
+  { id:315, cat:6, titel:"F63.1 – Brandstiftung (Pyromanie) •", text:"F63.1 Brandstiftung (Pyromanie) •" },
+  { id:316, cat:6, titel:"F63.2 – Stehlen (Kleptomanie) •", text:"F63.2 Stehlen (Kleptomanie) •" },
+  { id:317, cat:6, titel:"F63.3 – Trichotillomanie •", text:"F63.3 Trichotillomanie •" },
+  { id:318, cat:6, titel:"F63.8 – Störungen der Impulskontrolle, sonstige •", text:"F63.8 Störungen der Impulskontrolle, sonstige •" },
+  { id:319, cat:6, titel:"F63.9 – Störung der Impulskontrolle, nicht näher bezeichnet •", text:"F63.9 Störung der Impulskontrolle, nicht näher bezeichnet •" },
+  { id:320, cat:6, titel:"F64.0 – Transsexualismus •", text:"F64.0 Transsexualismus •" },
+  { id:321, cat:6, titel:"F64.1 – Transvestitismus unter Beibehaltung beider Geschlechtsrollen •", text:"F64.1 Transvestitismus unter Beibehaltung beider Geschlechtsrollen •" },
+  { id:322, cat:6, titel:"F64.2 – Störung der Geschlechtsidentität des Kindesalters •", text:"F64.2 Störung der Geschlechtsidentität des Kindesalters •" },
+  { id:323, cat:6, titel:"F64.8 – Störungen der Geschlechtsidentität, sonstige •", text:"F64.8 Störungen der Geschlechtsidentität, sonstige •" },
+  { id:324, cat:6, titel:"F64.9 – Störung der Geschlechtsidentität, nicht näher bezeichnet •", text:"F64.9 Störung der Geschlechtsidentität, nicht näher bezeichnet •" },
+  { id:325, cat:6, titel:"F65.0 – Fetischismus •", text:"F65.0 Fetischismus •" },
+  { id:326, cat:6, titel:"F65.1 – Fetischistischer Transvestitismus •", text:"F65.1 Fetischistischer Transvestitismus •" },
+  { id:327, cat:6, titel:"F65.2 – Exhibitionismus •", text:"F65.2 Exhibitionismus •" },
+  { id:328, cat:6, titel:"F65.3 – Voyeurismus •", text:"F65.3 Voyeurismus •" },
+  { id:329, cat:6, titel:"F65.4 – Pädophilie •", text:"F65.4 Pädophilie •" },
+  { id:330, cat:6, titel:"F65.5 – Sadomasochismus •", text:"F65.5 Sadomasochismus •" },
+  { id:331, cat:6, titel:"F65.6 – Multiple Störungen der Sexualpräferenz •", text:"F65.6 Multiple Störungen der Sexualpräferenz •" },
+  { id:332, cat:6, titel:"F65.8 – Störungen der Sexualpräferenz, sonstige •", text:"F65.8 Störungen der Sexualpräferenz, sonstige •" },
+  { id:333, cat:6, titel:"F65.9 – Störung der Sexualpräferenz, nicht näher bezeichnet •", text:"F65.9 Störung der Sexualpräferenz, nicht näher bezeichnet •" },
+  { id:334, cat:6, titel:"F66.0 – Störung der psychosexuellen Entwicklung •", text:"F66.0 Störung der psychosexuellen Entwicklung •" },
+  { id:335, cat:6, titel:"F66.1 – Ich-dystone Sexualorientierung •", text:"F66.1 Ich-dystone Sexualorientierung •" },
+  { id:336, cat:6, titel:"F66.2 – Störung der Sexualbeziehungen •", text:"F66.2 Störung der Sexualbeziehungen •" },
+  { id:337, cat:6, titel:"F66.8 – Störungen der psychosexuellen Entwicklung/Orientierung, sonstige •", text:"F66.8 Störungen der psychosexuellen Entwicklung/Orientierung, sonstige •" },
+  { id:338, cat:6, titel:"F66.9 – Störung der psychosexuellen Entwicklung/Orientierung, nicht näher bezeichnet •", text:"F66.9 Störung der psychosexuellen Entwicklung/Orientierung, nicht näher bezeichnet •" },
+  { id:339, cat:6, titel:"F68.0 – Übertreibung körperlicher Beschwerden aus psychischen Gründen •", text:"F68.0 Übertreibung körperlicher Beschwerden aus psychischen Gründen •" },
+  { id:340, cat:6, titel:"F68.1 – Vorsätzliche Erzeugung/Vortäuschung von Krankheitssymptomen (artifizielle Störung) •", text:"F68.1 Vorsätzliche Erzeugung/Vortäuschung von Krankheitssymptomen (artifizielle Störung) •" },
+  { id:341, cat:6, titel:"F68.8 – Andere näher bezeichnete Persönlichkeits-/Verhaltensstörungen •", text:"F68.8 Andere näher bezeichnete Persönlichkeits-/Verhaltensstörungen •" },
+  { id:342, cat:6, titel:"F68.9 – Persönlichkeits-/Verhaltensstörung, nicht näher bezeichnet •", text:"F68.9 Persönlichkeits-/Verhaltensstörung, nicht näher bezeichnet •" },
+  { id:343, cat:6, titel:"F69 – Persönlichkeits-/Verhaltensstörung, nicht näher bezeichnet **F70--F79 Intelligenzminderung** •", text:"F69 Persönlichkeits-/Verhaltensstörung, nicht näher bezeichnet **F70--F79 Intelligenzminderung** •" },
+  { id:344, cat:7, titel:"F70.0 – Leichte Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •", text:"F70.0 Leichte Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •" },
+  { id:345, cat:7, titel:"F70.1 – Leichte Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •", text:"F70.1 Leichte Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •" },
+  { id:346, cat:7, titel:"F70.8 – Leichte Intelligenzminderung -- sonstige •", text:"F70.8 Leichte Intelligenzminderung -- sonstige •" },
+  { id:347, cat:7, titel:"F70.9 – Leichte Intelligenzminderung -- nicht näher bezeichnet •", text:"F70.9 Leichte Intelligenzminderung -- nicht näher bezeichnet •" },
+  { id:348, cat:7, titel:"F71.0 – Mittelgradige Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •", text:"F71.0 Mittelgradige Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •" },
+  { id:349, cat:7, titel:"F71.1 – Mittelgradige Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •", text:"F71.1 Mittelgradige Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •" },
+  { id:350, cat:7, titel:"F71.8 – Mittelgradige Intelligenzminderung -- sonstige •", text:"F71.8 Mittelgradige Intelligenzminderung -- sonstige •" },
+  { id:351, cat:7, titel:"F71.9 – Mittelgradige Intelligenzminderung -- nicht näher bezeichnet •", text:"F71.9 Mittelgradige Intelligenzminderung -- nicht näher bezeichnet •" },
+  { id:352, cat:7, titel:"F72.0 – Schwere Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •", text:"F72.0 Schwere Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •" },
+  { id:353, cat:7, titel:"F72.1 – Schwere Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •", text:"F72.1 Schwere Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •" },
+  { id:354, cat:7, titel:"F72.8 – Schwere Intelligenzminderung -- sonstige •", text:"F72.8 Schwere Intelligenzminderung -- sonstige •" },
+  { id:355, cat:7, titel:"F72.9 – Schwere Intelligenzminderung -- nicht näher bezeichnet •", text:"F72.9 Schwere Intelligenzminderung -- nicht näher bezeichnet •" },
+  { id:356, cat:7, titel:"F73.0 – Schwerste Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •", text:"F73.0 Schwerste Intelligenzminderung -- mit geringer/keiner Verhaltensstörung •" },
+  { id:357, cat:7, titel:"F73.1 – Schwerste Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •", text:"F73.1 Schwerste Intelligenzminderung -- mit bedeutsamer Verhaltensstörung •" },
+  { id:358, cat:7, titel:"F73.8 – Schwerste Intelligenzminderung -- sonstige •", text:"F73.8 Schwerste Intelligenzminderung -- sonstige •" },
+  { id:359, cat:7, titel:"F73.9 – Schwerste Intelligenzminderung -- nicht näher bezeichnet •", text:"F73.9 Schwerste Intelligenzminderung -- nicht näher bezeichnet •" },
+  { id:360, cat:7, titel:"F78.0 – Intelligenzminderung, andere -- mit geringer/keiner Verhaltensstörung •", text:"F78.0 Intelligenzminderung, andere -- mit geringer/keiner Verhaltensstörung •" },
+  { id:361, cat:7, titel:"F78.1 – Intelligenzminderung, andere -- mit bedeutsamer Verhaltensstörung •", text:"F78.1 Intelligenzminderung, andere -- mit bedeutsamer Verhaltensstörung •" },
+  { id:362, cat:7, titel:"F78.8 – Intelligenzminderung, andere -- sonstige •", text:"F78.8 Intelligenzminderung, andere -- sonstige •" },
+  { id:363, cat:7, titel:"F78.9 – Intelligenzminderung, andere -- nicht näher bezeichnet •", text:"F78.9 Intelligenzminderung, andere -- nicht näher bezeichnet •" },
+  { id:364, cat:7, titel:"F79.0 – Intelligenzminderung, nicht näher bezeichnet -- mit geringer/keiner Verhaltensstörung •", text:"F79.0 Intelligenzminderung, nicht näher bezeichnet -- mit geringer/keiner Verhaltensstörung •" },
+  { id:365, cat:7, titel:"F79.1 – Intelligenzminderung, nicht näher bezeichnet -- mit bedeutsamer Verhaltensstörung •", text:"F79.1 Intelligenzminderung, nicht näher bezeichnet -- mit bedeutsamer Verhaltensstörung •" },
+  { id:366, cat:7, titel:"F79.8 – Intelligenzminderung, nicht näher bezeichnet -- sonstige •", text:"F79.8 Intelligenzminderung, nicht näher bezeichnet -- sonstige •" },
+  { id:367, cat:7, titel:"F79.9 – Intelligenzminderung, nicht näher bezeichnet -- ohne nähere Angabe **F80--F89 Entwicklungsstörungen** •", text:"F79.9 Intelligenzminderung, nicht näher bezeichnet -- ohne nähere Angabe **F80--F89 Entwicklungsstörungen** •" },
+  { id:368, cat:8, titel:"F80.0 – Artikulationsstörung •", text:"F80.0 Artikulationsstörung •" },
+  { id:369, cat:8, titel:"F80.1 – Expressive Sprachstörung •", text:"F80.1 Expressive Sprachstörung •" },
+  { id:370, cat:8, titel:"F80.2 – Rezeptive Sprachstörung •", text:"F80.2 Rezeptive Sprachstörung •" },
+  { id:371, cat:8, titel:"F80.3 – Erworbene Aphasie mit Epilepsie (Landau-Kleffner) •", text:"F80.3 Erworbene Aphasie mit Epilepsie (Landau-Kleffner) •" },
+  { id:372, cat:8, titel:"F80.8 – Entwicklungsstörungen des Sprechens/Sprache, sonstige •", text:"F80.8 Entwicklungsstörungen des Sprechens/Sprache, sonstige •" },
+  { id:373, cat:8, titel:"F80.9 – Entwicklungsstörung des Sprechens/Sprache, nicht näher bezeichnet •", text:"F80.9 Entwicklungsstörung des Sprechens/Sprache, nicht näher bezeichnet •" },
+  { id:374, cat:8, titel:"F81.0 – Lese- und Rechtschreibstörung (spezifische Lesestörung) •", text:"F81.0 Lese- und Rechtschreibstörung (spezifische Lesestörung) •" },
+  { id:375, cat:8, titel:"F81.1 – Isolierte Rechtschreibstörung •", text:"F81.1 Isolierte Rechtschreibstörung •" },
+  { id:376, cat:8, titel:"F81.2 – Rechenstörung •", text:"F81.2 Rechenstörung •" },
+  { id:377, cat:8, titel:"F81.3 – Kombinierte Störungen schulischer Fertigkeiten •", text:"F81.3 Kombinierte Störungen schulischer Fertigkeiten •" },
+  { id:378, cat:8, titel:"F81.8 – Entwicklungsstörungen schulischer Fertigkeiten, sonstige •", text:"F81.8 Entwicklungsstörungen schulischer Fertigkeiten, sonstige •" },
+  { id:379, cat:8, titel:"F81.9 – Entwicklungsstörung schulischer Fertigkeiten, nicht näher bezeichnet •", text:"F81.9 Entwicklungsstörung schulischer Fertigkeiten, nicht näher bezeichnet •" },
+  { id:380, cat:8, titel:"F82 – Umschriebene Entwicklungsstörung der motorischen Funktionen •", text:"F82 Umschriebene Entwicklungsstörung der motorischen Funktionen •" },
+  { id:381, cat:8, titel:"F83 – Kombinierte umschriebene Entwicklungsstörungen •", text:"F83 Kombinierte umschriebene Entwicklungsstörungen •" },
+  { id:382, cat:8, titel:"F84.0 – Frühkindlicher Autismus •", text:"F84.0 Frühkindlicher Autismus •" },
+  { id:383, cat:8, titel:"F84.1 – Atypischer Autismus •", text:"F84.1 Atypischer Autismus •" },
+  { id:384, cat:8, titel:"F84.2 – Rett-Syndrom •", text:"F84.2 Rett-Syndrom •" },
+  { id:385, cat:8, titel:"F84.3 – Desintegrative Störung des Kindesalters •", text:"F84.3 Desintegrative Störung des Kindesalters •" },
+  { id:386, cat:8, titel:"F84.4 – Überaktive Störung mit Intelligenzminderung und Bewegungsstereotypien •", text:"F84.4 Überaktive Störung mit Intelligenzminderung und Bewegungsstereotypien •" },
+  { id:387, cat:8, titel:"F84.5 – Asperger-Syndrom •", text:"F84.5 Asperger-Syndrom •" },
+  { id:388, cat:8, titel:"F84.8 – Tiefgreifende Entwicklungsstörungen, sonstige •", text:"F84.8 Tiefgreifende Entwicklungsstörungen, sonstige •" },
+  { id:389, cat:8, titel:"F84.9 – Tiefgreifende Entwicklungsstörung, nicht näher bezeichnet •", text:"F84.9 Tiefgreifende Entwicklungsstörung, nicht näher bezeichnet •" },
+  { id:390, cat:8, titel:"F88 – Sonstige Entwicklungsstörungen •", text:"F88 Sonstige Entwicklungsstörungen •" },
+  { id:391, cat:8, titel:"F89 – Entwicklungsstörung, nicht näher bezeichnet **F90--F98 Verhaltens-/emotionale Störungen mit Beginn in Kindheit/Jugend** •", text:"F89 Entwicklungsstörung, nicht näher bezeichnet **F90--F98 Verhaltens-/emotionale Störungen mit Beginn in Kindheit/Jugend** •" },
+  { id:392, cat:9, titel:"F90.0 – Einfache Aktivitäts- und Aufmerksamkeitsstörung •", text:"F90.0 Einfache Aktivitäts- und Aufmerksamkeitsstörung •" },
+  { id:393, cat:9, titel:"F90.1 – Hyperkinetische Störung des Sozialverhaltens •", text:"F90.1 Hyperkinetische Störung des Sozialverhaltens •" },
+  { id:394, cat:9, titel:"F90.8 – Hyperkinetische Störungen, sonstige •", text:"F90.8 Hyperkinetische Störungen, sonstige •" },
+  { id:395, cat:9, titel:"F90.9 – Hyperkinetische Störung, nicht näher bezeichnet •", text:"F90.9 Hyperkinetische Störung, nicht näher bezeichnet •" },
+  { id:396, cat:9, titel:"F91.0 – Störung des Sozialverhaltens, auf den Familienkreis beschränkt •", text:"F91.0 Störung des Sozialverhaltens, auf den Familienkreis beschränkt •" },
+  { id:397, cat:9, titel:"F91.1 – Störung des Sozialverhaltens bei fehlenden sozialen Bindungen •", text:"F91.1 Störung des Sozialverhaltens bei fehlenden sozialen Bindungen •" },
+  { id:398, cat:9, titel:"F91.2 – Störung des Sozialverhaltens bei vorhandenen sozialen Bindungen •", text:"F91.2 Störung des Sozialverhaltens bei vorhandenen sozialen Bindungen •" },
+  { id:399, cat:9, titel:"F91.3 – Oppositionsstörung des Sozialverhaltens •", text:"F91.3 Oppositionsstörung des Sozialverhaltens •" },
+  { id:400, cat:9, titel:"F91.8 – Störungen des Sozialverhaltens, sonstige •", text:"F91.8 Störungen des Sozialverhaltens, sonstige •" },
+  { id:401, cat:9, titel:"F91.9 – Störung des Sozialverhaltens, nicht näher bezeichnet •", text:"F91.9 Störung des Sozialverhaltens, nicht näher bezeichnet •" },
+  { id:402, cat:9, titel:"F92.0 – Störung des Sozialverhaltens mit depressiver Störung •", text:"F92.0 Störung des Sozialverhaltens mit depressiver Störung •" },
+  { id:403, cat:9, titel:"F92.8 – Kombinierte Störungen des Sozialverhaltens und der Emotionen, sonstige •", text:"F92.8 Kombinierte Störungen des Sozialverhaltens und der Emotionen, sonstige •" },
+  { id:404, cat:9, titel:"F92.9 – Kombinierte Störung des Sozialverhaltens und der Emotionen, nicht näher bezeichnet •", text:"F92.9 Kombinierte Störung des Sozialverhaltens und der Emotionen, nicht näher bezeichnet •" },
+  { id:405, cat:9, titel:"F93.0 – Emotionale Störung des Kindesalters -- Trennungsangst •", text:"F93.0 Emotionale Störung des Kindesalters -- Trennungsangst •" },
+  { id:406, cat:9, titel:"F93.1 – Emotionale Störung des Kindesalters -- phobische Angst •", text:"F93.1 Emotionale Störung des Kindesalters -- phobische Angst •" },
+  { id:407, cat:9, titel:"F93.2 – Emotionale Störung des Kindesalters -- soziale Angst •", text:"F93.2 Emotionale Störung des Kindesalters -- soziale Angst •" },
+  { id:408, cat:9, titel:"F93.3 – Emotionale Störung des Kindesalters -- Geschwisterrivalität •", text:"F93.3 Emotionale Störung des Kindesalters -- Geschwisterrivalität •" },
+  { id:409, cat:9, titel:"F93.8 – Emotionale Störungen des Kindesalters, sonstige •", text:"F93.8 Emotionale Störungen des Kindesalters, sonstige •" },
+  { id:410, cat:9, titel:"F93.9 – Emotionale Störung des Kindesalters, nicht näher bezeichnet •", text:"F93.9 Emotionale Störung des Kindesalters, nicht näher bezeichnet •" },
+  { id:411, cat:9, titel:"F94.0 – Elektiver Mutismus •", text:"F94.0 Elektiver Mutismus •" },
+  { id:412, cat:9, titel:"F94.1 – Reaktive Bindungsstörung des Kindesalters •", text:"F94.1 Reaktive Bindungsstörung des Kindesalters •" },
+  { id:413, cat:9, titel:"F94.2 – Bindungsstörung des Kindesalters mit Enthemmung •", text:"F94.2 Bindungsstörung des Kindesalters mit Enthemmung •" },
+  { id:414, cat:9, titel:"F94.8 – Störungen sozialer Funktionen (Kindheit/Jugend), sonstige •", text:"F94.8 Störungen sozialer Funktionen (Kindheit/Jugend), sonstige •" },
+  { id:415, cat:9, titel:"F94.9 – Störung sozialer Funktionen (Kindheit/Jugend), nicht näher bezeichnet •", text:"F94.9 Störung sozialer Funktionen (Kindheit/Jugend), nicht näher bezeichnet •" },
+  { id:416, cat:9, titel:"F95.0 – Vorübergehende Tic-Störung •", text:"F95.0 Vorübergehende Tic-Störung •" },
+  { id:417, cat:9, titel:"F95.1 – Chronische motorische oder vokale Tic-Störung •", text:"F95.1 Chronische motorische oder vokale Tic-Störung •" },
+  { id:418, cat:9, titel:"F95.2 – Kombinierte vokale und multiple motorische Tics (Tourette-Syndrom) •", text:"F95.2 Kombinierte vokale und multiple motorische Tics (Tourette-Syndrom) •" },
+  { id:419, cat:9, titel:"F95.8 – Tic-Störungen, sonstige •", text:"F95.8 Tic-Störungen, sonstige •" },
+  { id:420, cat:9, titel:"F95.9 – Tic-Störung, nicht näher bezeichnet •", text:"F95.9 Tic-Störung, nicht näher bezeichnet •" },
+  { id:421, cat:9, titel:"F98.0 – Enuresis (nichtorganisch) •", text:"F98.0 Enuresis (nichtorganisch) •" },
+  { id:422, cat:9, titel:"F98.1 – Enkopresis (nichtorganisch) •", text:"F98.1 Enkopresis (nichtorganisch) •" },
+  { id:423, cat:9, titel:"F98.2 – Fütterstörung des Kindesalters •", text:"F98.2 Fütterstörung des Kindesalters •" },
+  { id:424, cat:9, titel:"F98.3 – Pica des Kindesalters •", text:"F98.3 Pica des Kindesalters •" },
+  { id:425, cat:9, titel:"F98.4 – Stereotype Bewegungsstörungen •", text:"F98.4 Stereotype Bewegungsstörungen •" },
+  { id:426, cat:9, titel:"F98.5 – Stottern •", text:"F98.5 Stottern •" },
+  { id:427, cat:9, titel:"F98.6 – Poltern •", text:"F98.6 Poltern •" },
+  { id:428, cat:9, titel:"F98.8 – Sonstige näher bezeichnete Verhaltens-/emotionale Störungen (Kindheit/Jugend) •", text:"F98.8 Sonstige näher bezeichnete Verhaltens-/emotionale Störungen (Kindheit/Jugend) •" },
+  { id:429, cat:9, titel:"F98.9 – Verhaltens-/emotionale Störung (Kindheit/Jugend), nicht näher bezeichnet **F99** •", text:"F98.9 Verhaltens-/emotionale Störung (Kindheit/Jugend), nicht näher bezeichnet **F99** •" },
+  { id:430, cat:10, titel:"F99 – Psychische Störung, nicht näher bezeichnet • ICD-10 Z73 Persönlichkeitsakzentuierung / V.a. Persönlichkeitsstörung", text:"F99 Psychische Störung, nicht näher bezeichnet • ICD-10 Z73 Persönlichkeitsakzentuierung / V.a. Persönlichkeitsstörung" }
+];
+
+function anzeigen() {
+  const liste = document.getElementById("baustein-list");
+  const suche = suchbegriff.toLowerCase();
+
+  if (suche) {
+    const gefiltert = bausteine.filter(b =>
+      b.titel.toLowerCase().includes(suche) ||
+      b.text.toLowerCase().includes(suche)
+    );
+    if (gefiltert.length === 0) {
+      liste.innerHTML = '<p class="no-results">Kein Code gefunden.</p>';
+      return;
+    }
+    liste.innerHTML = gefiltert.map(b => {
+      const parts = b.titel.split(' – ');
+      const code = parts[0];
+      const desc = parts.slice(1).join(' – ');
+      return `<div class="baustein-card${selectedId===b.id?' selected':''}" data-id="${b.id}" onclick="waehlen(${b.id})">
+        <div class="baustein-code">${code}</div>
+        <div class="baustein-desc">${desc}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  let html = '';
+  kategorien.forEach(kat => {
+    const items = bausteine.filter(b => b.cat === kat.id);
+    const isOpen = offeneKats.has(kat.id);
+    html += `<div class="kat-group">
+      <div class="kat-header${isOpen?' open':''}" onclick="toggleKat(${kat.id})">
+        <div class="kat-header-left">
+          <span class="kat-code">${kat.code}</span>
+          <span class="kat-name">${kat.name}</span>
+          <span class="kat-count">(${items.length})</span>
+        </div>
+        <span class="kat-arrow">▼</span>
+      </div>
+      <div class="kat-body${isOpen?' open':''}">
+        ${items.map(b => {
+          const parts = b.titel.split(' – ');
+          const code = parts[0];
+          const desc = parts.slice(1).join(' – ');
+          return `<div class="baustein-card${selectedId===b.id?' selected':''}" data-id="${b.id}" onclick="waehlen(${b.id})">
+            <div class="baustein-code">${code}</div>
+            <div class="baustein-desc">${desc}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+  liste.innerHTML = html;
+}
+
+function toggleKat(id) {
+  offeneKats.has(id) ? offeneKats.delete(id) : offeneKats.add(id);
+  anzeigen();
+}
+
+function waehlen(id) {
+  selectedId = id;
+  document.querySelectorAll('.baustein-card').forEach(c =>
+    c.classList.toggle('selected', parseInt(c.dataset.id) === id)
+  );
+  document.getElementById('btn-einfuegen').disabled = false;
+  document.getElementById('btn-vorschau').disabled = false;
+}
+
+function vorschauZeigen() {
+  const b = bausteine.find(x => x.id === selectedId);
+  if (!b) return;
+  const parts = b.titel.split(' – ');
+  document.getElementById('vorschau-titel').textContent = parts[0];
+  document.getElementById('vorschau-text').textContent = b.text;
+  document.getElementById('vorschau-overlay').classList.add('open');
+}
+
+function vorschauSchliessen() {
+  document.getElementById('vorschau-overlay').classList.remove('open');
+}
+
+async function einfuegen() {
+  const b = bausteine.find(x => x.id === selectedId);
+  if (!b) return;
+  try {
+    await Word.run(async ctx => {
+      const sel = ctx.document.getSelection();
+      sel.insertText(b.text, 'Replace');
+      await ctx.sync();
+    });
+    toast('✓ Code eingefügt');
+  } catch(e) {
+    toast('Demo: ' + b.text);
+  }
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+document.getElementById('search-input').addEventListener('input', e => {
+  suchbegriff = e.target.value;
+  selectedId = null;
+  document.getElementById('btn-einfuegen').disabled = true;
+  document.getElementById('btn-vorschau').disabled = true;
+  anzeigen();
+});
+document.getElementById('btn-vorschau').addEventListener('click', vorschauZeigen);
+document.getElementById('btn-einfuegen').addEventListener('click', einfuegen);
+document.getElementById('vorschau-close').addEventListener('click', vorschauSchliessen);
+document.getElementById('vorschau-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('vorschau-overlay')) vorschauSchliessen();
+});
+document.getElementById('baustein-list').addEventListener('dblclick', e => {
+  if (e.target.closest('.baustein-card')) einfuegen();
+});
+
+if (typeof Office !== 'undefined') {
+  Office.onReady(() => anzeigen());
+} else {
+  anzeigen();
+}
+</script>
+</body>
+</html>
